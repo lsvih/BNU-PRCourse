@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>近邻聚类法 · 步进演示</title>
+<style>
+  :root {
+    --blue: #3b82f6;
+    --blue-dark: #2563eb;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 20px;
+    background: #eef2f7;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .wrap { max-width: 1240px; margin: 0 auto; }
+
+  /* ---------------- 顶部标题 ---------------- */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  /* ---------------- 主体两栏布局 ---------------- */
+  .main {
+    display: grid;
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  }
+  .card + .card { margin-top: 12px; }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  /* ---------------- 参数控件 ---------------- */
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .row label { color: #374151; }
+  .val {
+    font-weight: 600;
+    color: var(--blue);
+    font-variant-numeric: tabular-nums;
+  }
+  input[type=range] {
+    width: 100%;
+    margin: 0 0 14px;
+    accent-color: var(--blue);
+  }
+  .check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 9px 0;
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+  }
+  .check input {
+    width: 15px;
+    height: 15px;
+    margin: 3px 0 0;
+    accent-color: var(--blue);
+    cursor: pointer;
+    flex: none;
+  }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0 2px; }
+
+  /* ---------------- 按钮 ---------------- */
+  .btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  button.btn {
+    padding: 9px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button.btn:hover:not(:disabled) { background: #f0f7ff; border-color: #93c5fd; }
+  button.btn:disabled { opacity: .42; cursor: not-allowed; }
+  button.btn.primary {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+    font-weight: 600;
+  }
+  button.btn.primary:hover:not(:disabled) { background: var(--blue-dark); border-color: var(--blue-dark); }
+
+  /* ---------------- 状态 / 说明 / 日志 ---------------- */
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 14px 0 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .status b { color: var(--ink); font-weight: 600; }
+
+  .explain {
+    min-height: 76px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--blue);
+    border-radius: 6px;
+    background: #f0f7ff;
+    color: #1e3a8a;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .log {
+    max-height: 230px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #6b7280;
+  }
+  .log div { padding: 4px 0; border-bottom: 1px dashed #f1f5f9; }
+  .log div:last-child { color: var(--ink); }
+  .log b { color: var(--blue); font-weight: 600; }
+
+  /* ---------------- 画布 ---------------- */
+  .stage {
+    padding: 12px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+    position: sticky;
+    top: 20px;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .tools .hint { color: #9ca3af; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>近邻聚类法 · 步进演示</h1>
+      <div class="subtitle">每点一次「下一步」处理一个样本，观察它是被归入已有的类，还是新建一个类</div>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- ============ 左侧控制面板 ============ -->
+    <aside>
+      <section class="card">
+        <h2>参数</h2>
+        <div class="row">
+          <label for="theta">阈值 θ（判断远近的标准）</label>
+          <span class="val" id="thetaVal">90</span>
+        </div>
+        <input type="range" id="theta" min="20" max="260" step="5" value="90" />
+
+        <label class="check">
+          <input type="checkbox" id="useMean" checked />
+          <span>归入后把类中心更新为「类内所有样本的均值」<br />
+            <span style="color:#9ca3af">不勾选则类中心始终是第一个加入该类的样本</span></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="randomOrder" />
+          <span>随机打乱样本的处理顺序</span>
+        </label>
+
+        <hr />
+        <label class="check">
+          <input type="checkbox" id="showTheta" checked />
+          <span>显示 θ 范围（每个中心外的虚线圆）</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="showLinks" checked />
+          <span>显示当前样本到最近中心的连线</span>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>步进控制</h2>
+        <div class="btns">
+          <button class="btn" id="btnPrev">← 上一步</button>
+          <button class="btn primary" id="btnNext">下一步 →</button>
+          <button class="btn" id="btnAuto">▶ 自动播放</button>
+          <button class="btn" id="btnReset">↺ 重置</button>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="explain" id="explain"></div>
+      </section>
+
+      <section class="card">
+        <h2>执行日志</h2>
+        <div class="log" id="log"></div>
+      </section>
+    </aside>
+
+    <!-- ============ 右侧画布 ============ -->
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <div class="tools">
+        <button class="btn" id="btnRandom">随机生成样本</button>
+        <button class="btn" id="btnClear">清空样本</button>
+        <span class="hint">
+          空白处单击 = 添加样本　·　拖动圆点 = 移动　·　右键圆点 = 删除　·　键盘 ← → = 步进
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==========================================================================
+     算法部分：独立的一个脚本块，可以整段复制出去单独使用
+     ========================================================================== -->
+<script>
+/* ============================================================================
+ *  近邻聚类法（最近邻聚类法 / 阈值法）
+ *  ----------------------------------------------------------------------------
+ *  【算法思想】
+ *      把样本一个接一个地拿进来处理：
+ *        ① 算出当前样本到每一个「已有类中心」的距离，找出最近的那一个；
+ *        ② 若最近距离 d ≤ 阈值 θ  →  把样本归入最近的那一类；
+ *           若最近距离 d >  阈值 θ  →  它离已有的类都太远，以它为中心新建一类。
+ *
+ *  【特点】
+ *      · 不需要事先指定类的个数，类的个数由阈值 θ 决定（θ 越大，类越少）；
+ *      · 样本的处理顺序会影响最终结果；
+ *      · 第一个被处理的样本总是自成一类。
+ *
+ *  【对外接口】
+ *      nn.reset(points, theta, useMean, order)  回到「一个样本都没处理」的初始状态
+ *      nn.step()                                处理下一个样本，返回这一步的文字说明
+ *      nn.clusters / nn.cursor / nn.done        当前的聚类结果与进度
+ * ========================================================================== */
+
+const nn = {
+  points: [],      // 全部样本点：[{x, y}, {x, y}, ...]
+  theta: 90,       // 阈值 θ
+  useMean: true,   // 归入某一类后，是否把类中心更新为「类内所有样本的均值」
+  order: [],       // 处理顺序，存的是 points 的下标，例如 [3, 0, 7, ...]
+  cursor: 0,       // 已经处理了几个样本（order 中前 cursor 个已处理完）
+  clusters: [],    // 聚类结果：[{ center: {x, y}, members: [下标, ...] }, ...]
+  last: null,      // 最近一步的判断过程，只用于画布高亮
+  done: false,     // 样本是否全部处理完毕
+};
+
+// 两点之间的欧氏距离
+function nnDist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+// 求若干个样本的平均位置（mean 就是「均值」的意思）
+function nnMean(points, indices) {
+  let sumX = 0, sumY = 0;
+  for (const i of indices) {
+    sumX += points[i].x;
+    sumY += points[i].y;
+  }
+  return { x: sumX / indices.length, y: sumY / indices.length };
+}
+
+// 回到初始状态（一个样本都还没处理），返回初始说明文字
+nn.reset = function (points, theta, useMean, order) {
+  this.points = points;        // 直接引用页面上的样本数组，拖动样本点时结果会跟着变
+  this.theta = theta;
+  this.useMean = useMean;
+  this.order = order;
+  this.cursor = 0;
+  this.clusters = [];
+  this.last = null;
+  this.done = points.length === 0;
+  if (points.length === 0) return '画布上还没有样本点。';
+  return `共有 ${points.length} 个样本，阈值 θ = ${theta}。点击「下一步」开始处理第 1 个样本。`;
+};
+
+// 处理下一个样本 —— 整个算法只有这一个函数
+nn.step = function () {
+  if (this.cursor >= this.order.length) {
+    this.done = true;
+    return '所有样本都已经处理完了。';
+  }
+
+  const idx  = this.order[this.cursor];        // 当前样本在 points 中的下标
+  const p    = this.points[idx];
+  const name = `样本 #${idx + 1} (${Math.round(p.x)}, ${Math.round(p.y)})`;
+
+  // ---------- 情况一：还没有任何类，当前样本自成一类 ----------
+  if (this.clusters.length === 0) {
+    this.clusters.push({ center: { x: p.x, y: p.y }, members: [idx] });
+    this.last = { pointIndex: idx, clusterIndex: 0, created: true };
+    this.cursor++;
+    this.done = this.cursor >= this.order.length;
+    return `${name} 是第一个被处理的样本，以它为中心建立第 1 类 C1。`;
+  }
+
+  // ---------- 第一步：找出离它最近的那个类中心 ----------
+  let near     = 0;              // 最近的中心是第几类
+  let nearDist = Infinity;       // 最近的距离是多少
+  for (let k = 0; k < this.clusters.length; k++) {
+    const d = nnDist(p, this.clusters[k].center);
+    if (d < nearDist) {
+      nearDist = d;
+      near     = k;
+    }
+  }
+
+  // ---------- 第二步：拿最近距离和阈值 θ 比较 ----------
+  const cluster = this.clusters[near];
+  let text;
+
+  if (nearDist <= this.theta) {
+    // 情况二：距离不超过阈值 → 归入最近的那一类
+    cluster.members.push(idx);
+
+    let extra = '';
+    if (this.useMean) {
+      cluster.center = nnMean(this.points, cluster.members);   // 中心挪到类内均值处
+      extra = `，并把 C${near + 1} 的中心更新为类内均值 (${Math.round(cluster.center.x)}, ${Math.round(cluster.center.y)})`;
+    }
+
+    this.last = { pointIndex: idx, clusterIndex: near, created: false };
+    text = `${name}：到最近的类中心 C${near + 1} 的距离 d = ${nearDist.toFixed(1)} ≤ θ = ${this.theta}，`
+         + `所以归入 C${near + 1}${extra}。`;
+
+  } else {
+    // 情况三：距离超过阈值 → 新建一类
+    this.clusters.push({ center: { x: p.x, y: p.y }, members: [idx] });
+
+    this.last = { pointIndex: idx, clusterIndex: this.clusters.length - 1, created: true };
+    text = `${name}：到最近的类中心 C${near + 1} 的距离 d = ${nearDist.toFixed(1)} > θ = ${this.theta}，`
+         + `离已有的类都太远，以它为中心新建 C${this.clusters.length}。`;
+  }
+
+  this.cursor++;
+  this.done = this.cursor >= this.order.length;
+  if (this.done) text += ` 全部样本处理完毕，最终得到 ${this.clusters.length} 个类。`;
+  return text;
+};
+</script>
+
+
+<!-- ==========================================================================
+     页面逻辑：画布绘制 + 按钮交互 + 文字面板
+     （这里只负责「显示」和「交互」，算法的每一步都在上面那个脚本块里）
+     ========================================================================== -->
+<script>
+const CW = 760, CH = 540;                    // 画布的逻辑宽高（像素）
+
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const $   = id => document.getElementById(id);
+
+// ------------------------------- 页面状态 -------------------------------
+const app = {
+  points: [],         // 画布上的样本点
+  theta: 90,          // 阈值 θ
+  useMean: true,      // 是否用类内均值更新中心
+  randomOrder: false, // 是否随机处理顺序
+  showTheta: true,    // 是否画出 θ 范围
+  showLinks: true,    // 是否画出连线
+  order: [],          // 本次运行使用的处理顺序
+  steps: 0,           // 已经走了多少步
+  logs: [],           // 每一步的文字说明
+  timer: null,        // 自动播放的定时器
+  drag: -1,           // 正在拖动的样本下标
+};
+
+// ------------------------------- 小工具 -------------------------------
+const range   = n => Array.from({ length: n }, (_, i) => i);
+const esc     = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// 生成处理顺序：默认按下标顺序，勾选后随机打乱
+function buildOrder() {
+  return app.randomOrder ? shuffle(range(app.points.length)) : range(app.points.length);
+}
+
+// 在第 i 类上取色（用黄金角散开色相，任意类数都能得到区分度较高的颜色）
+function colorOf(k, alpha) {
+  const h = (205 + k * 137.508) % 360;
+  return `hsla(${h}, 70%, 47%, ${alpha === undefined ? 1 : alpha})`;
+}
+
+// ------------------------------- 状态同步 -------------------------------
+// 页面只记录「走了多少步」，算法状态每次都从初始状态重放出来，
+// 这样「上一步」只需要把步数减一，不用自己维护历史快照。
+function sync() {
+  const n = app.points.length;
+
+  if (n === 0) {
+    nn.reset([], app.theta, app.useMean, []);
+    app.steps = 0;
+    app.logs  = ['画布上还没有样本点。点击画布空白处添加，或点「随机生成样本」。'];
+    return;
+  }
+
+  // 顺序数组必须刚好覆盖所有样本（添加样本后长度会变）
+  if (app.order.length !== n) app.order = buildOrder();
+
+  const texts = [nn.reset(app.points, app.theta, app.useMean, app.order)];
+  for (let i = 0; i < app.steps; i++) texts.push(nn.step());
+  app.logs = texts;
+}
+
+function isDone() {
+  return app.points.length === 0 || nn.done;
+}
+
+// ------------------------------- 绘制 -------------------------------
+function draw() {
+  ctx.clearRect(0, 0, CW, CH);
+  ctx.fillStyle = '#fcfdff';
+  ctx.fillRect(0, 0, CW, CH);
+  drawGrid();
+
+  if (app.points.length === 0) {
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '15px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('在画布空白处单击即可添加样本点，或点击下方「随机生成样本」', CW / 2, CH / 2);
+    return;
+  }
+
+  drawThetaRanges();
+  drawCurrentLink();
+  drawSamples();
+  drawCenters();
+}
+
+function drawGrid() {
+  ctx.save();
+  ctx.strokeStyle = '#eef2f8';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 40; x < CW; x += 40) { ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, CH); }
+  for (let y = 40; y < CH; y += 40) { ctx.moveTo(0, y + .5); ctx.lineTo(CW, y + .5); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 每个类中心外面画一个半径 = θ 的虚线圆：落进圆里就该归入这一类
+function drawThetaRanges() {
+  if (!app.showTheta) return;
+  ctx.save();
+  ctx.setLineDash([6, 6]);
+  ctx.lineWidth = 1.5;
+  nn.clusters.forEach((c, k) => {
+    ctx.strokeStyle = colorOf(k, .45);
+    ctx.beginPath();
+    ctx.arc(c.center.x, c.center.y, app.theta, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+// 把「当前样本」和它最近的类中心连起来
+function drawCurrentLink() {
+  if (!app.showLinks || !nn.last) return;
+  const p = app.points[nn.last.pointIndex];
+  const c = nn.clusters[nn.last.clusterIndex];
+  if (!p || !c) return;
+
+  ctx.save();
+  ctx.strokeStyle = colorOf(nn.last.clusterIndex, .85);
+  ctx.lineWidth = 2;
+  ctx.setLineDash(nn.last.created ? [6, 4] : []);   // 新建的类用虚线
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(c.center.x, c.center.y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSamples() {
+  // 先算出每个样本属于哪一类（-1 表示还没处理到）
+  const owner = new Array(app.points.length).fill(-1);
+  nn.clusters.forEach((c, k) => c.members.forEach(i => { owner[i] = k; }));
+
+  app.points.forEach((p, i) => {
+    const k         = owner[i];
+    const isCurrent = nn.last && nn.last.pointIndex === i;
+    const color     = k >= 0 ? colorOf(k) : '#c3ccd8';
+    drawDot(p, color, k >= 0 ? 6.5 : 5.5, isCurrent, color);
+  });
+}
+
+function drawDot(p, color, r, highlight, ringColor) {
+  if (highlight) {                       // 当前正在处理的样本加一圈光晕
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2);
+    ctx.strokeStyle = ringColor || color;
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = .5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#fff';
+  ctx.stroke();
+}
+
+function drawCenters() {
+  nn.clusters.forEach((c, k) => drawCenter(c.center, k, 'C' + (k + 1)));
+}
+
+function drawCenter(c, k, label) {
+  const color = colorOf(k);
+
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 10, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  // 类名（先描一圈白边，压在点上也能看清）
+  ctx.font = 'bold 13px ui-monospace, Menlo, Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = 'rgba(255,255,255,.95)';
+  ctx.strokeText(label, c.x + 13, c.y - 13);
+  ctx.fillStyle = color;
+  ctx.fillText(label, c.x + 13, c.y - 13);
+}
+
+// ------------------------------- 面板文字 -------------------------------
+function paint() {
+  $('status').innerHTML =
+    `第 <b>${app.steps}</b> 步　·　已处理 <b>${nn.cursor}</b> / ${nn.order.length} 个样本　·　`
+    + `当前 <b>${nn.clusters.length}</b> 个类　·　阈值 θ = <b>${app.theta}</b>`;
+
+  const last = app.logs[app.logs.length - 1] || '';
+  $('explain').textContent = last;
+
+  const logEl = $('log');
+  logEl.innerHTML = app.logs
+    .map((t, i) => `<div>${i === 0 ? '' : `<b>${i}.</b> `}${esc(t)}</div>`)
+    .join('');
+  logEl.scrollTop = logEl.scrollHeight;
+
+  $('btnPrev').disabled = app.steps === 0;
+  $('btnNext').disabled = isDone();
+  $('btnAuto').textContent = app.timer ? '⏸ 暂停' : '▶ 自动播放';
+}
+
+function render() {
+  sync();
+  draw();
+  paint();
+}
+
+// ------------------------------- 步进控制 -------------------------------
+function nextStep() {
+  if (isDone()) return;
+  app.steps++;
+  render();
+}
+
+function prevStep() {
+  if (app.steps === 0) return;
+  app.steps--;
+  render();
+}
+
+function toggleAuto() {
+  if (app.timer) { stopAuto(); paint(); return; }
+  if (isDone()) return;
+  app.timer = setInterval(() => {
+    if (isDone()) { stopAuto(); paint(); return; }
+    app.steps++;
+    render();
+  }, 700);
+  paint();
+}
+
+function stopAuto() {
+  if (app.timer) { clearInterval(app.timer); app.timer = null; }
+}
+
+// 重新开始一次运行。reshuffle = 是否重新抽处理顺序
+function resetRun(reshuffle) {
+  stopAuto();
+  if (reshuffle) app.order = buildOrder();
+  app.steps = 0;
+  render();
+}
+
+// ------------------------------- 样本编辑 -------------------------------
+function canvasPos(e) {
+  const r = cv.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * CW / r.width,
+    y: (e.clientY - r.top)  * CH / r.height,
+  };
+}
+
+function hitTest(p) {
+  for (let i = app.points.length - 1; i >= 0; i--) {
+    if (Math.hypot(app.points[i].x - p.x, app.points[i].y - p.y) <= 14) return i;
+  }
+  return -1;
+}
+
+function randomPoints(n) {
+  // 先在画布上随机撒几个「团心」，再在团心附近生成样本，这样聚类效果更直观
+  const blobCount = 4;
+  const blobs = range(blobCount).map(() => ({
+    x: 120 + Math.random() * (CW - 240),
+    y: 100 + Math.random() * (CH - 200),
+  }));
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const b = blobs[i % blobCount];
+    pts.push({
+      x: Math.round(Math.min(CW - 20, Math.max(20, b.x + (Math.random() - .5) * 170))),
+      y: Math.round(Math.min(CH - 20, Math.max(20, b.y + (Math.random() - .5) * 170))),
+    });
+  }
+  return pts;
+}
+
+cv.addEventListener('pointerdown', e => {
+  const p   = canvasPos(e);
+  const hit = hitTest(p);
+
+  if (hit >= 0) {
+    app.drag = hit;                                  // 拖动已有的样本点
+  } else {
+    app.points.push(p);                              // 空白处：新增一个样本
+    if (app.randomOrder) app.order.push(app.points.length - 1);
+    else                 app.order = range(app.points.length);
+    app.drag = app.points.length - 1;                // 新增后可以直接拖着调整位置
+  }
+  cv.setPointerCapture(e.pointerId);
+  render();
+});
+
+cv.addEventListener('pointermove', e => {
+  if (app.drag < 0) return;
+  const p = canvasPos(e);
+  app.points[app.drag] = {
+    x: Math.max(8, Math.min(CW - 8, p.x)),
+    y: Math.max(8, Math.min(CH - 8, p.y)),
+  };
+  render();
+});
+
+cv.addEventListener('pointerup', e => {
+  if (app.drag >= 0) {
+    cv.releasePointerCapture(e.pointerId);
+    app.drag = -1;
+  }
+});
+
+cv.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const hit = hitTest(canvasPos(e));
+  if (hit < 0) return;
+  app.points.splice(hit, 1);      // 删掉后所有下标都会前移，所以直接重排处理顺序
+  app.order = buildOrder();
+  app.steps = 0;
+  render();
+});
+
+// ------------------------------- 控件绑定 -------------------------------
+$('theta').addEventListener('input', e => {
+  app.theta = +e.target.value;
+  $('thetaVal').textContent = app.theta;
+  app.steps = 0;                  // 阈值变了，之前的结果不再成立，从头开始
+  render();
+});
+
+$('useMean').addEventListener('change', e => {
+  app.useMean = e.target.checked;
+  app.steps = 0;
+  render();
+});
+
+$('randomOrder').addEventListener('change', e => {
+  app.randomOrder = e.target.checked;
+  resetRun(true);
+});
+
+$('showTheta').addEventListener('change', e => {
+  app.showTheta = e.target.checked;
+  draw();
+});
+
+$('showLinks').addEventListener('change', e => {
+  app.showLinks = e.target.checked;
+  draw();
+});
+
+$('btnNext').addEventListener('click', () => { stopAuto(); nextStep(); });
+$('btnPrev').addEventListener('click', () => { stopAuto(); prevStep(); });
+$('btnAuto').addEventListener('click', toggleAuto);
+$('btnReset').addEventListener('click', () => resetRun(true));
+
+$('btnRandom').addEventListener('click', () => {
+  app.points = randomPoints(24);
+  app.order  = buildOrder();
+  resetRun(true);
+});
+
+$('btnClear').addEventListener('click', () => {
+  app.points = [];
+  app.order  = [];
+  resetRun(true);
+});
+
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;      // 让滑块自己响应方向键
+  if (e.key === 'ArrowRight') { e.preventDefault(); stopAuto(); nextStep(); }
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); stopAuto(); prevStep(); }
+  if (e.key === ' ')          { e.preventDefault(); toggleAuto(); }
+});
+
+// ------------------------------- 启动 -------------------------------
+(function init() {
+  const dpr = window.devicePixelRatio || 1;      // 高分屏下画得清楚一点
+  cv.width  = CW * dpr;
+  cv.height = CH * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  app.points = randomPoints(24);
+  app.order  = buildOrder();
+  resetRun(false);
+})();
+</script>
+</body>
+</html>

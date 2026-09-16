@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K-Means 聚类 · 分步演示</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+                 "Noto Sans CJK SC", "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
+    background: #f4f6fa;
+    color: #1f2937;
+    font-size: 14px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header { padding: 20px 28px 6px; }
+  header h1 { margin: 0 0 4px; font-size: 19px; font-weight: 650; letter-spacing: .2px; }
+  header p { margin: 0; color: #64748b; font-size: 13px; }
+
+  main {
+    display: flex;
+    gap: 18px;
+    padding: 14px 28px 36px;
+    align-items: flex-start;
+  }
+  .stage { flex: 1 1 auto; min-width: 0; }
+  .panel { flex: 0 0 340px; width: 340px; }
+
+  canvas#stage {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .hint {
+    margin: 8px 2px 0;
+    font-size: 12.5px;
+    color: #64748b;
+    min-height: 20px;
+  }
+  .hint b { color: #2563eb; font-weight: 600; }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
+  }
+
+  /* ---- 状态卡 ---- */
+  .status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    background: #eef2f7;
+    color: #475569;
+  }
+  .badge.assigned  { background: #e0ebff; color: #1d4ed8; }
+  .badge.updated   { background: #f3e8ff; color: #7e22ce; }
+  .badge.converged { background: #dcfce7; color: #15803d; }
+  .badge.stopped   { background: #ffedd5; color: #c2410c; }
+
+  .metrics {
+    font-size: 12px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+  }
+  #narration { margin: 10px 0 0; font-size: 13.5px; }
+  #narration .k { color: #2563eb; font-weight: 600; }
+  #narration .warn { color: #b45309; }
+  #narration .ok { color: #15803d; font-weight: 600; }
+
+  /* ---- 图例 ---- */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px 2px 7px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: #f8fafc;
+    border: 1px solid #e8edf3;
+    font-variant-numeric: tabular-nums;
+    color: #334155;
+  }
+  .chip.empty { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+
+  /* ---- SSE 曲线 ---- */
+  canvas#sse-chart { display: block; width: 100%; height: 118px; }
+  .chart-cap { font-size: 12px; color: #64748b; margin-top: 6px; }
+
+  /* ---- 控件 ---- */
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px;
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row > label { color: #475569; font-size: 13px; flex: 0 0 auto; }
+  .val { font-variant-numeric: tabular-nums; color: #1f2937; min-width: 34px; text-align: right; font-size: 13px; }
+
+  select {
+    font: inherit; font-size: 13px;
+    padding: 4px 8px; border-radius: 8px;
+    border: 1px solid #d7dee8; background: #fff; color: #1f2937;
+    flex: 1 1 auto; min-width: 0;
+  }
+  input[type=range] { flex: 1 1 auto; min-width: 0; accent-color: #2563eb; }
+
+  .stepper { display: inline-flex; align-items: center; gap: 2px; }
+  .stepper button {
+    width: 26px; height: 26px; line-height: 1;
+    border-radius: 7px; border: 1px solid #d7dee8;
+    background: #fff; color: #334155; font-size: 15px; cursor: pointer;
+  }
+  .stepper button:hover { background: #f1f5f9; }
+  .stepper span {
+    min-width: 30px; text-align: center;
+    font-variant-numeric: tabular-nums; font-weight: 600;
+  }
+
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btns button {
+    font: inherit; font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid #d7dee8;
+    background: #fff; color: #334155;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .btns button:hover:not(:disabled) { background: #f1f5f9; }
+  .btns button:disabled { opacity: .45; cursor: not-allowed; }
+  .btns button.primary {
+    grid-column: 1 / -1;
+    background: #2563eb; border-color: #2563eb; color: #fff;
+    font-weight: 600; font-size: 14px; padding: 10px;
+  }
+  .btns button.primary:hover:not(:disabled) { background: #1d4ed8; }
+  .btns button.active { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+
+  .checks label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #475569; margin-bottom: 7px; cursor: pointer;
+  }
+  .checks label:last-child { margin-bottom: 0; }
+  .checks input { accent-color: #2563eb; width: 15px; height: 15px; }
+
+  .sect-title {
+    font-size: 12px; font-weight: 600; color: #94a3b8;
+    letter-spacing: .8px; margin: 0 0 10px;
+  }
+  kbd {
+    background: #f1f5f9; border: 1px solid #e2e8f0; border-bottom-width: 2px;
+    border-radius: 5px; padding: 0 5px; font-size: 11.5px; font-family: inherit; color: #475569;
+  }
+
+  @media (max-width: 900px) {
+    main { flex-direction: column; padding: 14px 16px 32px; }
+    .panel { flex: 1 1 auto; width: 100%; }
+    header { padding: 16px 16px 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>K-Means 聚类 · 分步演示</h1>
+  <p>点一次「步进」只看一步：先<b>分配</b>（每个点找最近的质心），再<b>更新</b>（质心移到本簇均值处）。</p>
+</header>
+
+<main>
+  <section class="stage">
+    <canvas id="stage"></canvas>
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <div class="status-head">
+        <span class="badge" id="badge">初始</span>
+        <span class="metrics" id="metrics"></span>
+      </div>
+      <p id="narration"></p>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="card">
+      <p class="sect-title">SSE 下降曲线</p>
+      <canvas id="sse-chart"></canvas>
+      <p class="chart-cap">每点一步（分配、更新各一点）。SSE 只会下降或持平 —— 如果它涨了，说明程序有 bug。</p>
+    </div>
+
+    <div class="card">
+      <p class="sect-title">参数</p>
+      <div class="row">
+        <label>簇数 K</label>
+        <div class="stepper">
+          <button id="k-minus" type="button">−</button>
+          <span id="k-value">3</span>
+          <button id="k-plus" type="button">+</button>
+        </div>
+      </div>
+      <div class="row">
+        <label>数据点</label>
+        <input type="range" id="n-points" min="50" max="800" step="50" value="300">
+        <span class="val" id="n-points-val">300</span>
+      </div>
+      <div class="row">
+        <label>初始质心</label>
+        <select id="init-mode">
+          <option value="plusplus">K-Means++</option>
+          <option value="random">随机取点（Forgy）</option>
+          <option value="manual">手动点击放置</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="sect-title">操作</p>
+      <div class="btns">
+        <button id="btn-step" class="primary" type="button">步进 ▶</button>
+        <button id="btn-auto" type="button">自动播放</button>
+        <button id="btn-reset" type="button">重置</button>
+        <button id="btn-reseed" type="button">换一组初始质心</button>
+        <button id="btn-regenerate" type="button">重新生成数据</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label>播放速度</label>
+        <input type="range" id="speed" min="150" max="1800" step="50" value="750">
+        <span class="val" id="speed-val">750</span>
+      </div>
+      <p class="chart-cap" style="margin-top:4px">
+        快捷键：<kbd>→</kbd> 步进 · <kbd>R</kbd> 重置 · <kbd>N</kbd> 换初始质心
+      </p>
+    </div>
+
+    <div class="card checks">
+      <p class="sect-title">显示</p>
+      <label><input type="checkbox" id="opt-voronoi" checked> 区域划分（各质心的“势力范围”）</label>
+      <label><input type="checkbox" id="opt-links" checked> 点到所属质心的连线</label>
+      <label><input type="checkbox" id="opt-trails" checked> 质心移动轨迹</label>
+    </div>
+  </aside>
+</main>
+
+
+<!-- ==========================================================================
+     第 1 个 script：K-Means 算法本体
+     ========================================================================== -->
+<script>
+/* ============================================================================
+ *  K-Means 算法本体 —— 这个文件里最该看懂的部分
+ *  ---------------------------------------------------------------------------
+ *  同学：把这一个 <script> 从头读到尾，就能完整理解 K-Means 在干什么。
+ *
+ *  它不碰页面上的任何东西 —— 没有 canvas、没有按钮、没有颜色，只做数学。
+ *  想知道它和数据长什么样没关系：打开浏览器控制台直接敲 KM，能看到全部函数，
+ *  也可以自己调用，和界面上步进的结果对照：
+ *      KM.assign(points, centers)       // 手动做一次「分配」
+ *      KM.kmeans(points, 3, 1e-4, 50)   // 一口气跑完，看它和步进是不是一样
+ *
+ *  数据格式（和 numpy 的 X[:, 0] / X[:, 1] 对应）：
+ *      一个点 = [x, y]          一堆点 = [[x, y], [x, y], ...]
+ *      质心和点是完全一样的结构，所以可以直接互相算距离
+ * ========================================================================== */
+
+var KM = {};   // 所有算法都装在这一个对象里，避免和下面的绘图代码重名
+
+
+/* ---------------------------------------------------------------------------
+ * 0. 可复现的随机数（这不是算法本身，同学扫一眼即可）
+ *    seed 相同时，每次运行的结果完全相同 —— 课上重讲一遍能得到同样的画面。
+ *    把它换成 Math.random() 也完全可以，只是结果不再可复现。
+ * ------------------------------------------------------------------------- */
+
+KM._seed = 42;
+
+KM.reseed = function (s) {
+  // 种子必须落在 1 ~ 2147483646：这种发生器里 0 是吸收态，进去就永远输出 0
+  KM._seed = (Math.abs(Math.floor(s)) % 2147483646) + 1;
+};
+
+KM.random = function () {
+  // 乘同余法：seed = (seed * 48271) % 2147483647
+  // 常数 48271 是特意选的：乘积最大约 1e14，没有超出 JS 能精确表示的整数范围
+  KM._seed = (KM._seed * 48271) % 2147483647;
+  return KM._seed / 2147483647;   // 结果落在 (0, 1)，不会等于 0 或 1
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 1. 距离：K-Means 里唯一的“度量”，所有判断都靠它
+ * ------------------------------------------------------------------------- */
+
+KM.distance = function (a, b) {
+  // 欧氏距离： d = √( (x1-x2)² + (y1-y2)² )
+  var dx = a[0] - b[0];
+  var dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 2. 初始化：一开始的 K 个质心放在哪
+ *    K-Means 对初始位置很敏感 —— 换个起点，可能收敛到不同的结果（局部最优）
+ * ------------------------------------------------------------------------- */
+
+KM.initRandom = function (points, k) {
+  // 随机取点法（Forgy 初始化）：从数据点里随机挑 K 个不同的点当初始质心
+  // 这正是 T1/example3.py 里用的那种：centroids = X[init_idx].copy()
+  if (k > points.length) throw new Error('K 不能大于数据点的个数');
+  var centers = [];
+  var used = [];
+  while (centers.length < k) {
+    var i = Math.floor(KM.random() * points.length);
+    if (used[i] === true) continue;          // 这个点挑过了，重挑一个
+    used[i] = true;
+    centers.push([points[i][0], points[i][1]]);   // 必须复制一份！
+    // 若写成 centers.push(points[i])，后面改质心就会把原始数据点也改掉
+  }
+  return centers;
+};
+
+KM.initPlusPlus = function (points, k) {
+  // K-Means++ 初始化：让 K 个初始质心尽量互相远离，结果通常更稳定
+  var centers = [];
+  var first = Math.floor(KM.random() * points.length);
+  centers.push([points[first][0], points[first][1]]);
+
+  while (centers.length < k) {
+    // 第 1 步：每个点算一下“离我最近的那个已有质心”有多远
+    var dist2 = [];
+    var total = 0;
+    for (var i = 0; i < points.length; i++) {
+      var best = KM.distance(points[i], centers[0]);
+      for (var c = 1; c < centers.length; c++) {
+        var d = KM.distance(points[i], centers[c]);
+        if (d < best) best = d;              // 注意是“最近的那个质心”，不是最近的“点”
+      }
+      dist2[i] = best * best;                // 取平方：越远的点被选中的机会越大
+      total = total + dist2[i];
+    }
+
+    // 第 2 步：按权重大小“掷飞镖”，飞镖落在哪个点的区间里就选哪个点
+    var r = KM.random() * total;
+    var acc = 0;
+    var chosen = points.length - 1;          // 兜底：浮点误差让 r 略大于 total 时用它
+    for (var j = 0; j < points.length; j++) {
+      acc = acc + dist2[j];
+      if (r <= acc) { chosen = j; break; }
+    }
+    centers.push([points[chosen][0], points[chosen][1]]);
+  }
+  return centers;
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 3. 【第 1 步】分配：每个点认领离自己最近的那个质心
+ * ------------------------------------------------------------------------- */
+
+KM.assign = function (points, centers) {
+  var labels = [];
+  for (var i = 0; i < points.length; i++) {
+    var bestIndex = 0;                                  // 目前最近的质心编号
+    var bestDist = KM.distance(points[i], centers[0]);  // 目前最近的距离
+    for (var c = 1; c < centers.length; c++) {
+      var d = KM.distance(points[i], centers[c]);
+      if (d < bestDist) {            // 用严格小于：打平时取编号小的那个，结果才稳定
+        bestDist = d;
+        bestIndex = c;
+      }
+    }
+    labels[i] = bestIndex;           // labels[i] = 第 i 个点属于第几簇
+  }
+  return labels;
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 4. 【第 2 步】更新：质心挪到“本簇所有点的平均值”处
+ * ------------------------------------------------------------------------- */
+
+KM.update = function (points, labels, centers) {
+  // 注意：labels 用的是上一步分配的结果，这里【不重新分配】。
+  //       这正是 K-Means 的语义：先分配一次，再按这次分配的结果移动质心。
+  // 返回新的质心数组（不修改传进来的 centers）
+  var k = centers.length;
+  var sumX = [];
+  var sumY = [];
+  var count = [];
+  for (var c = 0; c < k; c++) { sumX[c] = 0; sumY[c] = 0; count[c] = 0; }
+
+  // 1) 把每个点累加到它所属的那一簇
+  for (var i = 0; i < points.length; i++) {
+    var g = labels[i];
+    sumX[g] = sumX[g] + points[i][0];
+    sumY[g] = sumY[g] + points[i][1];
+    count[g] = count[g] + 1;
+  }
+
+  // 2) 求平均，就是新质心
+  var newCenters = [];
+  for (var j = 0; j < k; j++) {
+    if (count[j] === 0) {
+      // 空簇：一个点都没分到它，平均值没法算（除以 0 会变成 NaN）。
+      // 这里让它原地不动 —— 和 example3.py 里 if mask.any() 的处理一致，
+      // 好处是这样能保证 SSE 只降不升。
+      newCenters[j] = [centers[j][0], centers[j][1]];
+    } else {
+      newCenters[j] = [sumX[j] / count[j], sumY[j] / count[j]];
+    }
+  }
+  return newCenters;
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 5. 打分：SSE（簇内平方误差和，sklearn 里叫 inertia）
+ * ------------------------------------------------------------------------- */
+
+KM.sse = function (points, labels, centers) {
+  // SSE = Σ 每个点到「它所属质心」的距离的平方。越小说明簇越紧凑。
+  // 注意：同一个点集上 SSE 一定随迭代下降，但 K 越大 SSE 天然越小，
+  //       所以不能只靠 SSE 来选 K（那要用肘部法则）。
+  var total = 0;
+  for (var i = 0; i < points.length; i++) {
+    var d = KM.distance(points[i], centers[labels[i]]);
+    total = total + d * d;
+  }
+  return total;
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 6. 收敛判断：质心不再移动 = 收敛
+ * ------------------------------------------------------------------------- */
+
+KM.maxMove = function (oldCenters, newCenters) {
+  // 这一轮里移动得最远的那个质心走了多远
+  var maxMove = 0;
+  for (var c = 0; c < oldCenters.length; c++) {
+    var d = KM.distance(oldCenters[c], newCenters[c]);
+    if (d > maxMove) maxMove = d;
+  }
+  return maxMove;
+};
+
+KM.hasConverged = function (oldCenters, newCenters, tol) {
+  // 所有质心的移动都小于 tol 就认为收敛了。
+  // 这和 example3.py 里的 np.allclose(centroids, new_centroids, atol=tol) 是一回事。
+  // 为什么质心不动就算收敛？因为质心不动 → 下一次分配的结果也不会变。
+  return KM.maxMove(oldCenters, newCenters) <= tol;
+};
+
+
+/* ---------------------------------------------------------------------------
+ * 7. 串起来看 —— 整个 K-Means 就是一个 for 循环
+ *    界面上把这两步拆开，是为了让你看清楚每一步分别干了什么
+ * ------------------------------------------------------------------------- */
+
+KM.kmeans = function (points, k, tol, maxIter) {
+  var centers = KM.initPlusPlus(points, k);      // 换成 KM.initRandom 就是随机初始化
+  var labels = [];
+  var iter = 0;
+  for (iter = 0; iter < maxIter; iter++) {
+    labels = KM.assign(points, centers);                    // 第 1 步：分配
+    var newCenters = KM.update(points, labels, centers);    // 第 2 步：更新
+    var done = KM.hasConverged(centers, newCenters, tol);   // 质心还动吗？
+    centers = newCenters;
+    if (done) break;                                        // 不动了，收工
+  }
+  return {
+    centers: centers,
+    labels: labels,
+    iters: iter + 1,
+    sse: KM.sse(points, labels, centers)
+  };
+};
+</script>
+
+
+<!-- ==========================================================================
+     下面全部都是绘图和交互了，同学可以无视
+     ========================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================================
+   * 0. 常量与全局状态
+   * ====================================================================== */
+
+  // 画布的逻辑坐标尺寸 = 它在页面上的实际显示尺寸（在 setupAll 里更新）。
+  // 这样绘图坐标和 CSS 像素一一对应，文字不会被非等比缩放拉扁。
+  var W = 800, H = 600;                  // 主画布
+  var CW = 308, CH = 118;                // SSE 曲线
+
+  var BOUNDS = { x0: -8, x1: 8, y0: -6, y1: 6 };   // 数据坐标系范围，固定不变
+  var PAD = 36;                          // 数据区离画布边缘的留白
+  var POINT_R = 3.4;                     // 数据点半径
+  var TOL = 1e-4;                        // 收敛阈值
+  var MAX_ITER = 50;                     // 最大迭代轮数
+  var TAU = Math.PI * 2;
+  var VORONOI_GW = 200, VORONOI_GH = 150;   // Voronoi 底色用的小图分辨率
+
+  // tab10 配色，和 matplotlib 默认色一致，同学在 example3.py 里见过
+  var CLUSTER_RGB = [
+    [31, 119, 180], [255, 127, 14], [44, 160, 44], [214, 39, 40],
+    [148, 103, 189], [140, 86, 75], [227, 119, 194], [127, 127, 127]
+  ];
+
+  var S = {
+    points: [],            // 全部数据点 [[x,y], ...]
+    labels: [],            // 每个点的簇号（空数组 = 还没分配）
+    centers: [],           // 当前质心
+    history: [],           // history[i] = 第 i 个质心的历次位置（画轨迹用）
+    buckets: [],           // buckets[c] = 属于第 c 簇的点下标（画图提速用）
+    moves: null,           // 上一次「更新」中每个质心的移动 [{from, to}, ...]
+    phase: 'INIT',         // INIT | ASSIGNED | UPDATED | CONVERGED | STOPPED
+    iter: 0,               // 已完成的轮数（一轮 = 分配 + 更新）
+    sse: null,             // 当前 SSE
+    sseHistory: [],        // 每一步的 SSE（画曲线用）
+    lastMove: 0,           // 上一次更新的最大位移
+    changed: 0,            // 上一次分配中改变归属的点的个数
+    manualLeft: 0,         // 手动模式下还要放几个质心
+    seed: 1,               // 当前随机种子（决定初始质心取在哪）
+    seedCounter: 42,       // 「换一组初始质心」用的种子计数器
+    view: { scale: 1, ox: 0, oy: 0, w: 0, h: 0 },
+    col: { solid: [], link: [], trail: [], tint: [] },
+    voronoiDirty: true
+  };
+
+  /* ---- 取元素 ---- */
+  function $(id) { return document.getElementById(id); }
+  var stageEl = $('stage');
+  var chartEl = $('sse-chart');
+  var badgeEl = $('badge');
+  var metricsEl = $('metrics');
+  var narrEl = $('narration');
+  var legendEl = $('legend');
+  var hintEl = $('hint');
+  var btnStep = $('btn-step');
+  var btnAuto = $('btn-auto');
+  var initModeEl = $('init-mode');
+  var kValueEl = $('k-value');
+  var nPointsEl = $('n-points');
+  var speedEl = $('speed');
+
+  var K = 3;
+  var main = {}, chart = {};
+  var timer = null;
+  var autoRunning = false;
+  var offCanvas = document.createElement('canvas');
+
+  /* =========================================================================
+   * 1. 画布初始化（HiDPI 下让文字和细线依然清晰）
+   * ====================================================================== */
+
+  function setupCanvas(canvas) {
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    var w = Math.max(1, rect.width), h = Math.max(1, rect.height);
+    // 位图尺寸 = CSS 尺寸 × dpr，于是在 Retina 屏上文字和细线依然清晰
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    var ctx = canvas.getContext('2d');
+    // 关键是这一步：之后所有绘图都用 CSS 像素坐标，由矩阵放大到设备像素。
+    // 注意 canvas.width 一旦被赋值，画布会被清空、变换矩阵会被重置，
+    // 所以 setTransform 必须在这里重做一次。
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, W: w, H: h };
+  }
+
+  function computeView() {
+    var dx = BOUNDS.x1 - BOUNDS.x0, dy = BOUNDS.y1 - BOUNDS.y0;
+    // 两个方向取同一个缩放系数：保证等比，不对 x/y 做拉伸。
+    // 距离是 K-Means 的全部，坐标轴比例失真会让「最近」看起来不对。
+    var scale = Math.min((W - 2 * PAD) / dx, (H - 2 * PAD) / dy);
+    S.view.scale = scale;
+    S.view.w = dx * scale;
+    S.view.h = dy * scale;
+    S.view.ox = (W - S.view.w) / 2;
+    S.view.oy = (H - S.view.h) / 2;
+  }
+
+  // 数据坐标 → 屏幕坐标（注意 y 轴要翻转：数据 y 向上，屏幕 y 向下）
+  function toScreen(p) {
+    var v = S.view;
+    return [v.ox + (p[0] - BOUNDS.x0) * v.scale,
+            v.oy + (BOUNDS.y1 - p[1]) * v.scale];
+  }
+
+  // 屏幕坐标 → 数据坐标（toScreen 的逆运算，两个函数必须紧挨着看）
+  function toData(sx, sy) {
+    var v = S.view;
+    return [BOUNDS.x0 + (sx - v.ox) / v.scale,
+            BOUNDS.y1 - (sy - v.oy) / v.scale];
+  }
+
+  function clusterColor(i, a) {
+    var c = CLUSTER_RGB[i % CLUSTER_RGB.length];
+    return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+  }
+
+  function rebuildColors() {
+    // 每次分配时把颜色字符串预生成好，避免在几百个点的循环里反复拼字符串
+    S.col = { solid: [], link: [], trail: [], tint: [] };
+    for (var i = 0; i < S.centers.length; i++) {
+      S.col.solid.push(clusterColor(i, 0.92));
+      S.col.link.push(clusterColor(i, 0.10));
+      S.col.trail.push(clusterColor(i, 0.45));
+      S.col.tint.push(CLUSTER_RGB[i % CLUSTER_RGB.length]);
+    }
+  }
+
+  /* =========================================================================
+   * 2. 生成数据（固定 4 个高斯团块 —— 不跟着 K 变）
+   *    这样 K=2 是欠分割、K=3 接近真值、K=6 是过分割，都能演示出有意义的结果
+   * ====================================================================== */
+
+  function gaussian() {
+    // Box-Muller：把两个均匀随机数变成标准正态随机数
+    var u = 0, v = 0;
+    while (u === 0) u = KM.random();
+    while (v === 0) v = KM.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v);
+  }
+
+  function inBounds(p) {
+    return p[0] > BOUNDS.x0 + 0.3 && p[0] < BOUNDS.x1 - 0.3 &&
+           p[1] > BOUNDS.y0 + 0.3 && p[1] < BOUNDS.y1 - 0.3;
+  }
+
+  function clampToBounds(p) {
+    return [Math.max(BOUNDS.x0 + 0.3, Math.min(BOUNDS.x1 - 0.3, p[0])),
+            Math.max(BOUNDS.y0 + 0.3, Math.min(BOUNDS.y1 - 0.3, p[1]))];
+  }
+
+  function generateData() {
+    var n = parseInt(nPointsEl.value, 10);
+    // 固定 4 个高斯团块，【不跟着 K 变】—— 这样 K=2 是欠分割、K=3 接近真值、
+    // K=6 是过分割，三种情况都能演示出有意义的结果
+    var base = [[-3.8, -2.0], [3.4, -2.3], [-3.2, 2.2], [4.0, 2.0]];
+    var centers = [];
+    for (var b = 0; b < base.length; b++) {
+      centers.push([base[b][0] + (KM.random() - 0.5) * 1.0,
+                    base[b][1] + (KM.random() - 0.5) * 1.0]);
+    }
+    // 标准差特意取得比较大（团块之间明显重叠）：这样算法要跑好几轮才收敛，
+    // 学生才看得到质心一步步挪进去的过程，SSE 曲线也才有内容。
+    // 取得太小的话（比如 1.0），一轮就基本到位，后半程是平的。
+    var std = 1.7;
+    var pts = [];
+    for (var i = 0; i < n; i++) {
+      var c = centers[i % centers.length];        // 轮流从 4 个团块里取点
+      var p = null, tries = 0;
+      do {
+        // 拒绝采样：落到画面外的点直接重抽。
+        // 直接截断到边界会在画布边上堆出一条不自然的直线。
+        p = [c[0] + gaussian() * std, c[1] + gaussian() * std];
+        tries++;
+      } while (tries < 30 && !inBounds(p));
+      pts.push(inBounds(p) ? p : clampToBounds(p));
+    }
+    S.points = pts;
+  }
+
+  /* =========================================================================
+   * 3. 状态机：一次点击 = 一次可见的变化
+   * ====================================================================== */
+
+  function initCenters() {
+    var mode = initModeEl.value;
+    if (mode === 'manual') {
+      S.centers = [];
+      S.history = [];
+      S.manualLeft = Math.min(K, S.points.length);
+    } else {
+      S.centers = (mode === 'plusplus' ? KM.initPlusPlus : KM.initRandom)(S.points, K);
+      S.history = S.centers.map(function (c) { return [c.slice()]; });
+      S.manualLeft = 0;
+    }
+    S.phase = 'INIT';
+  }
+
+  // 重新开始。keepData = 沿用同一批点；seed 不传就沿用当前的随机种子，
+  // 于是「重置」能完整重放刚才那一次演示（同样的初始质心、同样的过程）。
+  function reset(keepData, seed) {
+    stopAuto();
+    if (seed !== undefined) S.seed = seed;
+    KM.reseed(S.seed);
+    if (!keepData) generateData();
+    S.labels = [];
+    S.buckets = [];
+    S.moves = null;
+    S.iter = 0;
+    S.sse = null;
+    S.sseHistory = [];
+    S.lastMove = 0;
+    S.changed = 0;
+    initCenters();
+    rebuildColors();
+    S.voronoiDirty = true;
+    refreshAll();
+  }
+
+  function doAssign() {
+    var oldLabels = S.labels;
+    S.labels = KM.assign(S.points, S.centers);
+
+    // 统计这一轮有多少点换了簇 —— 一个点都不换，说明划分已经稳定
+    var changed = 0;
+    for (var i = 0; i < S.labels.length; i++) {
+      if (oldLabels[i] !== undefined && oldLabels[i] !== S.labels[i]) changed++;
+    }
+    S.changed = changed;
+
+    // 分桶：按簇把点下标归好，画图时一簇只需一次 fill
+    S.buckets = [];
+    for (var c = 0; c < S.centers.length; c++) S.buckets.push([]);
+    for (var j = 0; j < S.labels.length; j++) S.buckets[S.labels[j]].push(j);
+
+    S.sse = KM.sse(S.points, S.labels, S.centers);
+    S.sseHistory.push(S.sse);
+    S.phase = 'ASSIGNED';
+  }
+
+  function doUpdate() {
+    var oldCenters = S.centers;
+    var newCenters = KM.update(S.points, S.labels, oldCenters);
+    var maxMove = KM.maxMove(oldCenters, newCenters);
+
+    S.moves = [];
+    for (var i = 0; i < newCenters.length; i++) {
+      S.moves.push({ from: oldCenters[i], to: newCenters[i] });
+      S.history[i].push(newCenters[i].slice());
+    }
+    S.centers = newCenters;
+    S.iter += 1;
+    S.lastMove = maxMove;
+
+    // 关键：这里用的是【上一次分配】的 labels，不重新分配。
+    // 所以更新后画面上的点色和底色区域会故意对不上 —— 这正是下一次「分配」要修的事，
+    // 也是这个演示最值得看的一幕。千万不要在这里偷偷重新分配。
+    S.sse = KM.sse(S.points, S.labels, S.centers);
+    S.sseHistory.push(S.sse);
+    S.voronoiDirty = true;
+
+    if (maxMove <= TOL) S.phase = 'CONVERGED';
+    else if (S.iter >= MAX_ITER) S.phase = 'STOPPED';
+    else S.phase = 'UPDATED';
+  }
+
+  function step() {
+    if (S.manualLeft > 0) return;          // 还在等手动放质心
+    // 一个状态只做一件事 —— 用 switch 就不会出现「点一下跑了两步」
+    switch (S.phase) {
+      case 'INIT':
+      case 'UPDATED':  doAssign(); break;
+      case 'ASSIGNED': doUpdate(); break;
+      default: return;                     // CONVERGED / STOPPED 已经结束
+    }
+    refreshAll();
+  }
+
+  /* =========================================================================
+   * 4. 绘图
+   * ====================================================================== */
+
+  function render() {
+    var ctx = main.ctx, v = S.view;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    drawGrid();
+    drawVoronoi();
+    drawTrails();
+    drawLinks();
+    drawPoints();
+    drawMoves();
+    drawCenters();
+    drawTicks();
+  }
+
+  function drawGrid() {
+    var ctx = main.ctx, v = S.view;
+    ctx.save();
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var x = BOUNDS.x0; x <= BOUNDS.x1 + 1e-9; x += 1) {
+      var sx = toScreen([x, 0])[0];
+      ctx.moveTo(sx, v.oy);
+      ctx.lineTo(sx, v.oy + v.h);
+    }
+    for (var y = BOUNDS.y0; y <= BOUNDS.y1 + 1e-9; y += 1) {
+      var sy = toScreen([0, y])[1];
+      ctx.moveTo(v.ox, sy);
+      ctx.lineTo(v.ox + v.w, sy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTicks() {
+    var ctx = main.ctx, v = S.view;
+    ctx.save();
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (var x = BOUNDS.x0; x <= BOUNDS.x1 + 1e-9; x += 2) {
+      if (x === 0) continue;
+      ctx.fillText(String(x), toScreen([x, 0])[0], v.oy + v.h + 6);
+    }
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (var y = BOUNDS.y0 + 2; y <= BOUNDS.y1 - 1e-9; y += 2) {
+      if (y === 0) continue;
+      ctx.fillText(String(y), v.ox - 8, toScreen([0, y])[1]);
+    }
+    ctx.restore();
+  }
+
+  // Voronoi 底色：每个质心的“势力范围”。
+  // 做法是在一张 200x150 的小图上逐像素找最近质心，再放大贴回来 ——
+  // 和 example3.py 里 grid_labels + contourf 是一回事，只是挪到了浏览器里。
+  function drawVoronoi() {
+    if (!$('opt-voronoi').checked || S.centers.length === 0) return;
+    var ctx = main.ctx, v = S.view;
+
+    if (S.voronoiDirty) {
+      offCanvas.width = VORONOI_GW;
+      offCanvas.height = VORONOI_GH;
+      var octx = offCanvas.getContext('2d');
+      var img = octx.createImageData(VORONOI_GW, VORONOI_GH);
+      var data = img.data;
+      var k = S.centers.length;
+      var rgb = CLUSTER_RGB;
+
+      for (var gy = 0; gy < VORONOI_GH; gy++) {
+        // 小图第 gy 行对应的数据 y（屏幕向下 = 数据 y 变小，所以要翻转）
+        var dy = BOUNDS.y1 - (gy + 0.5) / VORONOI_GH * (BOUNDS.y1 - BOUNDS.y0);
+        for (var gx = 0; gx < VORONOI_GW; gx++) {
+          var dx = BOUNDS.x0 + (gx + 0.5) / VORONOI_GW * (BOUNDS.x1 - BOUNDS.x0);
+          var best = 0, bestD = Infinity;
+          for (var c = 0; c < k; c++) {
+            var ax = dx - S.centers[c][0], ay = dy - S.centers[c][1];
+            var d = ax * ax + ay * ay;
+            if (d < bestD) { bestD = d; best = c; }
+          }
+          var o = (gy * VORONOI_GW + gx) * 4;
+          data[o] = rgb[best % rgb.length][0];
+          data[o + 1] = rgb[best % rgb.length][1];
+          data[o + 2] = rgb[best % rgb.length][2];
+          data[o + 3] = 30;                    // 很淡的一层底色
+        }
+      }
+      octx.putImageData(img, 0, 0);
+      S.voronoiDirty = false;
+    }
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;          // 放大时自动把边界抹平，省掉抗锯齿
+    ctx.drawImage(offCanvas, 0, 0, VORONOI_GW, VORONOI_GH, v.ox, v.oy, v.w, v.h);
+    ctx.restore();
+  }
+
+  function drawTrails() {
+    if (!$('opt-trails').checked || S.history.length === 0) return;
+    var ctx = main.ctx;
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.2;
+    for (var i = 0; i < S.history.length; i++) {
+      var h = S.history[i];
+      if (h.length < 2) continue;
+      ctx.strokeStyle = S.col.trail[i] || clusterColor(i, 0.45);
+      ctx.beginPath();
+      for (var j = 0; j < h.length; j++) {
+        var s = toScreen(h[j]);
+        if (j === 0) ctx.moveTo(s[0], s[1]); else ctx.lineTo(s[0], s[1]);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawLinks() {
+    // 每个点到「它所属质心」的连线。透明度压到 0.10 时，几百条线会读成一片柔和的光晕，
+    // 恰好把簇的形状显出来，比画成不透明的乱麻更有信息量。
+    if (!$('opt-links').checked || S.labels.length === 0) return;
+    var ctx = main.ctx;
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (var c = 0; c < S.buckets.length; c++) {
+      var bucket = S.buckets[c];
+      if (!bucket.length) continue;
+      var cs = toScreen(S.centers[c]);
+      ctx.strokeStyle = S.col.link[c];
+      ctx.beginPath();
+      for (var n = 0; n < bucket.length; n++) {
+        var ps = toScreen(S.points[bucket[n]]);
+        ctx.moveTo(ps[0], ps[1]);
+        ctx.lineTo(cs[0], cs[1]);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawPoints() {
+    var ctx = main.ctx;
+    var R = POINT_R;
+
+    if (S.labels.length === 0) {
+      // 还没分配：所有点都是灰的
+      ctx.beginPath();
+      for (var i = 0; i < S.points.length; i++) {
+        var s = toScreen(S.points[i]);
+        ctx.moveTo(s[0] + R, s[1]);
+        ctx.arc(s[0], s[1], R, 0, TAU);
+      }
+      ctx.fillStyle = 'rgba(110,122,138,0.8)';
+      ctx.fill();
+      return;
+    }
+
+    // 按簇分桶，一簇只切一次 fillStyle（几百个点也只有几次状态切换）
+    ctx.lineWidth = 1;
+    for (var c = 0; c < S.buckets.length; c++) {
+      var bucket = S.buckets[c];
+      if (!bucket.length) continue;
+      ctx.beginPath();
+      for (var n = 0; n < bucket.length; n++) {
+        var p = toScreen(S.points[bucket[n]]);
+        ctx.moveTo(p[0] + R, p[1]);          // moveTo 之后再 arc，避免连出多余的线
+        ctx.arc(p[0], p[1], R, 0, TAU);
+      }
+      ctx.fillStyle = S.col.solid[c];
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.stroke();
+    }
+  }
+
+  function drawMoves() {
+    // 上一次「更新」里质心的移动：旧位置残影 + 虚线箭头
+    if (!S.moves) return;
+    var ctx = main.ctx;
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.8;
+    for (var i = 0; i < S.moves.length; i++) {
+      var from = toScreen(S.moves[i].from);
+      var to = toScreen(S.moves[i].to);
+      var dx = to[0] - from[0], dy = to[1] - from[1];
+      var len = Math.sqrt(dx * dx + dy * dy);
+
+      // 残影（旧位置）
+      ctx.strokeStyle = clusterColor(i, 0.55);
+      ctx.beginPath();
+      ctx.arc(from[0], from[1], 10, 0, TAU);
+      ctx.stroke();
+
+      // 位移小于 1 像素时不必画箭头 —— 那说明质心几乎没动，就是快收敛了
+      if (len < 1) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(from[0], from[1]);
+      ctx.lineTo(to[0], to[1]);
+      ctx.stroke();
+
+      // 箭头
+      var ang = Math.atan2(dy, dx);
+      ctx.setLineDash([]);
+      ctx.fillStyle = clusterColor(i, 0.8);
+      ctx.beginPath();
+      ctx.moveTo(to[0], to[1]);
+      ctx.lineTo(to[0] - 11 * Math.cos(ang - 0.4), to[1] - 11 * Math.sin(ang - 0.4));
+      ctx.lineTo(to[0] - 11 * Math.cos(ang + 0.4), to[1] - 11 * Math.sin(ang + 0.4));
+      ctx.closePath();
+      ctx.fill();
+      ctx.setLineDash([5, 4]);
+    }
+    ctx.restore();
+  }
+
+  function drawCenters() {
+    var ctx = main.ctx;
+    ctx.save();
+    for (var i = 0; i < S.centers.length; i++) {
+      var s = toScreen(S.centers[i]);
+      var color = CLUSTER_RGB[i % CLUSTER_RGB.length];
+
+      // 三层同心圆，保证质心在任何背景上都一眼可辨
+      ctx.beginPath();
+      ctx.arc(s[0], s[1], 11, 0, TAU);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(s[0], s[1], 8.5, 0, TAU);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgb(' + color[0] + ',' + color[1] + ',' + color[2] + ')';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(s[0], s[1], 2.2, 0, TAU);
+      ctx.fillStyle = 'rgb(' + color[0] + ',' + color[1] + ',' + color[2] + ')';
+      ctx.fill();
+
+      // 编号（C0/C1/...），贴边时往里收一收，别被裁掉
+      ctx.font = 'bold 12px "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      var lx = Math.min(Math.max(s[0] + 13, 2), W - 22);
+      var ly = Math.min(Math.max(s[1] - 13, 10), H - 10);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText('C' + i, lx + 1, ly + 1);
+      ctx.fillStyle = 'rgb(' + color[0] + ',' + color[1] + ',' + color[2] + ')';
+      ctx.fillText('C' + i, lx, ly);
+    }
+    ctx.restore();
+  }
+
+  /* =========================================================================
+   * 5. SSE 曲线
+   * ====================================================================== */
+
+  function drawChart() {
+    var ctx = chart.ctx;
+    var w = CW, h = CH;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+
+    var padL = 46, padR = 14, padT = 14, padB = 24;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, padT + plotH);
+    ctx.lineTo(padL + plotW, padT + plotH);
+    ctx.stroke();
+
+    ctx.font = '12px "PingFang SC", "Microsoft YaHei", sans-serif';
+    if (S.sseHistory.length === 0) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('点「步进」开始，SSE 会记录在每一步', w / 2, h / 2);
+      return;
+    }
+
+    var hist = S.sseHistory;
+    var hi = Math.max.apply(null, hist);
+    var lo = Math.min.apply(null, hist);
+    if (hi - lo < 1e-6) { hi = lo + 1; lo = lo - 1; }
+    var span = hi - lo;
+    hi += span * 0.12;
+    lo -= span * 0.12;
+
+    var n = hist.length;
+    function px(i) { return n === 1 ? padL + plotW / 2 : padL + plotW * i / (n - 1); }
+    function py(v) { return padT + plotH * (1 - (v - lo) / (hi - lo)); }
+
+    // y 轴刻度
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (var t = 0; t <= 3; t++) {
+      var val = lo + (hi - lo) * t / 3;
+      var yy = py(val);
+      ctx.fillText(val.toFixed(0), padL - 8, yy);
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.beginPath();
+      ctx.moveTo(padL, yy);
+      ctx.lineTo(padL + plotW, yy);
+      ctx.stroke();
+    }
+
+    // 折线
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var x = px(i), y = py(hist[i]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // 每一步的点
+    ctx.fillStyle = '#2563eb';
+    for (var j = 0; j < n; j++) {
+      if (j === n - 1) continue;
+      ctx.beginPath();
+      ctx.arc(px(j), py(hist[j]), 2, 0, TAU);
+      ctx.fill();
+    }
+    // 当前步用大圆点标出
+    ctx.beginPath();
+    ctx.arc(px(n - 1), py(hist[n - 1]), 4.2, 0, TAU);
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText('步数 →', padL + plotW, padT + plotH + 6);
+  }
+
+  /* =========================================================================
+   * 6. 状态文字（这个演示最主要的教学装置）
+   * ====================================================================== */
+
+  function updateStatus() {
+    var phaseText = {
+      INIT: '初始', ASSIGNED: '已分配', UPDATED: '已更新',
+      CONVERGED: '已收敛', STOPPED: '已停止'
+    }[S.phase];
+    var phaseClass = {
+      INIT: '', ASSIGNED: 'assigned', UPDATED: 'updated',
+      CONVERGED: 'converged', STOPPED: 'stopped'
+    }[S.phase];
+
+    if (S.manualLeft > 0) { phaseText = '待放置'; phaseClass = ''; }
+
+    badgeEl.textContent = phaseText;
+    badgeEl.className = 'badge ' + phaseClass;
+
+    var parts = ['第 ' + S.iter + ' 轮'];
+    if (S.sse !== null) parts.push('SSE ' + S.sse.toFixed(1));
+    if (S.phase === 'UPDATED' || S.phase === 'CONVERGED' || S.phase === 'STOPPED') {
+      parts.push('最大移动 ' + S.lastMove.toFixed(S.lastMove < 0.01 ? 4 : 3));
+    }
+    parts.push('K=' + S.centers.length, S.points.length + ' 点');
+    metricsEl.textContent = parts.join(' · ');
+
+    narrEl.innerHTML = narrationText();
+    updateLegend();
+    updateHint();
+    drawChart();
+  }
+
+  function modeName() {
+    return { plusplus: 'K-Means++', random: '随机取点（Forgy）', manual: '手动放置' }[initModeEl.value];
+  }
+
+  function narrationText() {
+    var stepWord = '<span class="k">下次点「步进」</span>：';
+
+    if (S.manualLeft > 0) {
+      var placed = S.centers.length;
+      return '【手动放置】请在画布上点击，放置<b>第 ' + (placed + 1) + ' / ' + K + '</b> 个初始质心。' +
+             '放完 ' + K + ' 个之后就可以开始步进了。';
+    }
+
+    if (S.phase === 'INIT') {
+      return '【初始】已用「' + modeName() + '」放置了 <b>' + S.centers.length + '</b> 个初始质心（图中的圆环靶心）。' +
+             '所有点现在都是灰色的 —— 还没有做分配，它们还不属于任何一个簇。<br>' +
+             stepWord + '把每个点分配给离它最近的质心，点会被染成对应簇的颜色。';
+    }
+
+    if (S.phase === 'ASSIGNED') {
+      var head = '【分配】第 ' + (S.iter + 1) + ' 轮 · 每个点都找到了离自己最近的质心，颜色就是它的簇号。';
+      if (S.iter > 0 && S.changed === 0) {
+        head = '【分配】第 ' + (S.iter + 1) + ' 轮 · 用新质心重新分配，' +
+               '<span class="ok">没有任何一个点改变归属</span> —— 划分已经稳定，很可能马上就收敛。';
+      } else if (S.iter > 0) {
+        head = '【分配】第 ' + (S.iter + 1) + ' 轮 · 有 <b>' + S.changed + '</b> 个点换了簇。';
+      }
+      return head + '当前 SSE = <b>' + S.sse.toFixed(1) + '</b>（所有点到所属质心的距离平方和，越小越紧凑）。<br>' +
+             stepWord + '把每个质心移动到<b>它这一簇所有点的平均值</b>处 —— 质心会离开原位，注意看虚线箭头。';
+    }
+
+    if (S.phase === 'UPDATED') {
+      var prev = S.sseHistory[S.sseHistory.length - 2];
+      return '【更新】第 ' + S.iter + ' 轮 · 质心挪到了各自簇的均值处，最大移动 <b>' +
+             S.lastMove.toFixed(3) + '</b>，SSE 从 ' + prev.toFixed(1) + ' 降到 <b>' + S.sse.toFixed(1) +
+             '</b>。<br><span class="warn">【注意】</span>点的颜色还是上一次分配的结果，' +
+             '<b>还没有重新分配</b>，所以有的点现在其实更靠近另一个质心 —— 看底色区域的边界和点色已经对不上了。<br>' +
+             stepWord + '用新的质心位置重新分配所有点，点色会更新。';
+    }
+
+    if (S.phase === 'CONVERGED') {
+      return '【收敛】第 ' + S.iter + ' 轮 · 所有质心的移动都小于阈值 ' + TOL +
+             '（实际最大移动 ' + S.lastMove.toFixed(5) + '），算法结束。<br>' +
+             '最终 SSE = <b>' + S.sse.toFixed(1) + '</b>，共 ' + S.iter + ' 轮。' +
+             '此时再分配一次也不会改变任何点的颜色 —— 这就是 K-Means 的收敛条件。<br>' +
+             '可以试试<b>「换一组初始质心」</b>：换个起点，结果和 SSE 可能都不一样 —— ' +
+             'K-Means 只保证收敛到<b>局部</b>最优，不保证全局最优。';
+    }
+
+    if (S.phase === 'STOPPED') {
+      return '【停止】已经跑满 ' + MAX_ITER + ' 轮仍未完全收敛（最大移动 ' + S.lastMove.toFixed(5) + '）。' +
+             '实际使用中通常也会设一个最大轮数上限，避免在极端数据上一直跑下去。';
+    }
+    return '';
+  }
+
+  function updateLegend() {
+    var html = '';
+    for (var c = 0; c < S.centers.length; c++) {
+      var cnt = S.buckets[c] ? S.buckets[c].length : 0;
+      var rgb = CLUSTER_RGB[c % CLUSTER_RGB.length];
+      var empty = (S.labels.length > 0 && cnt === 0);
+      html += '<span class="chip' + (empty ? ' empty' : '') + '">' +
+              '<span class="dot" style="background:rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')"></span>' +
+              'C' + c + ' · ' + cnt + ' 点' + (empty ? '（空簇）' : '') + '</span>';
+    }
+    legendEl.innerHTML = html;
+  }
+
+  function updateHint() {
+    var h;
+    if (S.manualLeft > 0) {
+      h = '点击画布，放置第 <b>' + (S.centers.length + 1) + '</b> 个初始质心';
+    } else {
+      h = '在画布上点击可以<b>添加一个数据点</b>（会退回初始状态，因为 SSE 曲线只在同一批点上才可比）';
+    }
+    hintEl.innerHTML = h;
+
+    var ended = (S.phase === 'CONVERGED' || S.phase === 'STOPPED');
+    btnStep.disabled = ended || S.manualLeft > 0;
+    btnStep.textContent = S.manualLeft > 0 ? '步进 ▶'
+      : (S.phase === 'ASSIGNED' ? '步进 ▶ 执行「更新」'
+      : (ended ? '已结束' : '步进 ▶ 执行「分配」'));
+    if (autoRunning) btnStep.textContent = ended ? '已结束' : '自动播放中…';
+  }
+
+  function refreshAll() {
+    render();
+    updateStatus();
+  }
+
+  /* =========================================================================
+   * 7. 自动播放（用 setTimeout 续订，不用 setInterval）
+   *    切到后台标签页时浏览器会节流定时器，回到前台 setInterval 会补发一串
+   *    tick，算法瞬间跳好几步，学生根本看不到中间过程。
+   * ====================================================================== */
+
+  function stopAuto() {
+    autoRunning = false;
+    if (timer) { clearTimeout(timer); timer = null; }
+    btnAuto.classList.remove('active');
+    btnAuto.textContent = '自动播放';
+  }
+
+  function startAuto() {
+    stopAuto();                                 // 幂等：先停掉可能存在的旧定时器
+    if (S.phase === 'CONVERGED' || S.phase === 'STOPPED' || S.manualLeft > 0) return;
+    autoRunning = true;
+    btnAuto.classList.add('active');
+    btnAuto.textContent = '暂停';
+    tick();
+  }
+
+  function tick() {
+    if (!autoRunning) return;
+    step();
+    if (S.phase === 'CONVERGED' || S.phase === 'STOPPED') { stopAuto(); updateHint(); return; }
+    timer = setTimeout(tick, parseInt(speedEl.value, 10));
+  }
+
+  /* =========================================================================
+   * 8. 交互
+   * ====================================================================== */
+
+  function canvasClick(evt) {
+    var rect = stageEl.getBoundingClientRect();
+    // 用 getBoundingClientRect 换算，而不是 offsetX —— 画布被 CSS 缩放过，
+    // offsetX 给的是设备像素，和我们的逻辑坐标不是一回事
+    var sx = (evt.clientX - rect.left) / rect.width * W;
+    var sy = (evt.clientY - rect.top) / rect.height * H;
+    var p = toData(sx, sy);
+
+    if (S.manualLeft > 0) {
+      S.centers.push(clampToBounds(p));
+      S.history.push([S.centers[S.centers.length - 1].slice()]);
+      S.manualLeft--;
+      rebuildColors();
+      S.voronoiDirty = true;
+      if (S.manualLeft === 0) S.phase = 'INIT';
+      refreshAll();
+      return;
+    }
+
+    // 添加一个数据点：回到初始状态（保留当前质心），因为 SSE 只有同一批点才可比
+    stopAuto();
+    S.points.push(clampToBounds(p));
+    S.labels = [];
+    S.buckets = [];
+    S.moves = null;
+    S.sse = null;
+    S.sseHistory = [];
+    S.iter = 0;
+    S.lastMove = 0;
+    S.changed = 0;
+    S.history = S.centers.map(function (c) { return [c.slice()]; });
+    S.phase = 'INIT';
+    refreshAll();
+  }
+
+  function changeK(delta) {
+    var maxK = Math.min(8, S.points.length);
+    var next = Math.max(1, Math.min(maxK, K + delta));
+    if (next === K) return;
+    K = next;
+    kValueEl.textContent = K;
+    reset(true);                 // 沿用同一批数据，用同一个种子重新初始化
+  }
+
+  function changePoints() {
+    $('n-points-val').textContent = nPointsEl.value;
+    reset(false, S.seedCounter);   // 点数变了要重新生成数据
+  }
+
+  function changeInitMode() {
+    reset(true);                 // 同一批数据、同一个种子，只换初始化方式
+  }
+
+  function bindUI() {
+    btnStep.addEventListener('click', function () { stopAuto(); step(); this.blur(); });
+
+    btnAuto.addEventListener('click', function () {
+      if (autoRunning) stopAuto(); else startAuto();
+      updateHint();
+      this.blur();
+    });
+
+    $('btn-reset').addEventListener('click', function () {
+      reset(true);               // 同数据 + 同种子 → 完整重放刚才那一次演示
+      this.blur();
+    });
+
+    $('btn-reseed').addEventListener('click', function () {
+      S.seedCounter++;
+      reset(true, S.seedCounter);   // 同数据 + 新种子 → 换一个起点，可能落到别的局部最优
+      this.blur();
+    });
+
+    $('btn-regenerate').addEventListener('click', function () {
+      S.seedCounter++;
+      reset(false, S.seedCounter);
+      this.blur();
+    });
+
+    $('k-minus').addEventListener('click', function () { changeK(-1); this.blur(); });
+    $('k-plus').addEventListener('click', function () { changeK(1); this.blur(); });
+
+    nPointsEl.addEventListener('input', changePoints);
+    initModeEl.addEventListener('change', changeInitMode);
+
+    speedEl.addEventListener('input', function () {
+      $('speed-val').textContent = this.value;
+    });
+
+    ['opt-voronoi', 'opt-links', 'opt-trails'].forEach(function (id) {
+      $(id).addEventListener('change', function () {
+        if (id === 'opt-voronoi') S.voronoiDirty = true;
+        render();
+      });
+    });
+
+    stageEl.addEventListener('click', canvasClick);
+
+    window.addEventListener('keydown', function (e) {
+      // 焦点在控件上时不抢键盘，避免和浏览器默认行为打架
+      if (/^(INPUT|SELECT|BUTTON|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (e.key === 'ArrowRight' || e.key === 'Enter') { stopAuto(); step(); e.preventDefault(); }
+      else if (e.key === 'r' || e.key === 'R') { reset(true); }
+      else if (e.key === 'n' || e.key === 'N') { S.seedCounter++; reset(true, S.seedCounter); }
+    });
+
+    window.addEventListener('resize', function () {
+      setupAll();
+    });
+  }
+
+  /* =========================================================================
+   * 9. 启动
+   * ====================================================================== */
+
+  function setupAll() {
+    main = setupCanvas(stageEl);
+    chart = setupCanvas(chartEl);
+    W = main.W;  H = main.H;             // 逻辑坐标跟着实际显示尺寸走
+    CW = chart.W;  CH = chart.H;
+    computeView();
+    S.voronoiDirty = true;
+    refreshAll();
+  }
+
+  bindUI();
+  KM.reseed(42);
+  generateData();     // 先用种子 42 生成数据……
+  setupAll();         // ……再按实际显示尺寸建好画布
+  reset(true, 1);     // ……最后用种子 1 初始化质心，让这三件事互不干扰
+})();
+</script>
+
+</body>
+</html>

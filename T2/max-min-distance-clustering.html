@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<!--
+  Author: Yanzeng Li
+  Date: 2026-09-16
+  Description: 最大最小距离聚类法（Max-Min Distance Clustering）交互式步进演示
+               纯前端单文件实现（HTML + CSS + JS），无需任何依赖，双击即可打开。
+               代码分三个 <script> 块：
+                 1) 公共绘图工具 —— 只负责画图
+                 2) 算法核心       —— 最大最小距离聚类法，学生重点阅读的部分
+                 3) 页面交互       —— 把算法的每一步画到画布上
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>最大最小距离聚类法 · 步进演示</title>
+<style>
+  :root {
+    --bg: #eef2f7;
+    --card: #ffffff;
+    --line: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --blue: #2563eb;
+    --amber: #d97706;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { padding: 22px 26px 4px; }
+  h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: .3px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 16px;
+    padding: 16px 26px 34px;
+    align-items: start;
+  }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+
+  .stage {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+    padding: 12px 12px 6px;
+  }
+  canvas { width: 100%; display: block; border-radius: 8px; cursor: crosshair; }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 2px 6px; }
+
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+    padding: 14px;
+  }
+  .card h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #fff; color: var(--text);
+    cursor: pointer; transition: .15s;
+  }
+  button:hover:not(:disabled) { border-color: #94a3b8; background: #f8fafc; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
+
+  .progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .bar { flex: 1; height: 6px; background: #e8edf4; border-radius: 99px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 99px; transition: width .2s; }
+  .ptext { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .stepnote {
+    font-size: 14px; line-height: 1.7; min-height: 66px;
+    border-left: 3px solid var(--blue);
+    background: #f8fafc;
+    padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .stats { display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
+  .stat { display: flex; justify-content: space-between; gap: 10px; }
+  .stat span { color: var(--muted); }
+  .stat b { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .tablewrap { max-height: 250px; overflow: auto; margin: 0 -4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 8px; text-align: right; border-bottom: 1px solid #f1f5f9; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #fff; }
+  tr.max td { background: #fef3c7; color: #92400e; font-weight: 600; }
+  tr.center td { color: var(--blue); font-weight: 600; }
+
+  .row { display: flex; align-items: center; gap: 10px; font-size: 13px; margin-top: 10px; }
+  .row input[type=range] { flex: 1; accent-color: var(--blue); }
+  .row label { color: var(--muted); white-space: nowrap; }
+  .row b { font-variant-numeric: tabular-nums; min-width: 28px; text-align: right; }
+  .checkline { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .checkline input { accent-color: var(--blue); }
+
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+  pre {
+    margin: 10px 0 0; padding: 10px; background: #f8fafc; border-radius: 8px;
+    font-size: 12px; line-height: 1.7; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .legend i { display: inline-block; vertical-align: middle; margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>最大最小距离聚类法 · 步进演示</h1>
+  <p class="sub">模式识别 · 交互式演示（纯前端单文件实现，可逐步观察聚类中心是怎样一个个产生的）</p>
+</header>
+
+<main>
+  <section class="stage">
+    <canvas id="canvas"></canvas>
+    <div class="legend">
+      <span><i style="width:11px;height:11px;border-radius:50%;background:#64748b"></i>样本点</span>
+      <span><i style="width:11px;height:11px;background:#2563eb;transform:rotate(45deg)"></i>聚类中心</span>
+      <span><i style="width:11px;height:11px;border:2px dashed #2563eb"></i>阈值半径 θ</span>
+    </div>
+    <p class="hint">提示：在画布内单击可以添加样本点；修改参数后会自动回到第 1 步。键盘 ← → 也可以前后步进。</p>
+  </section>
+
+  <aside class="side">
+    <div class="card">
+      <h2>步进控制</h2>
+      <div class="btnrow">
+        <button id="btnPrev">◀ 上一步</button>
+        <button id="btnNext" class="primary">下一步 ▶</button>
+        <button id="btnPlay">▶ 自动播放</button>
+        <button id="btnFirst">↺ 回到开头</button>
+      </div>
+      <div class="progress">
+        <div class="bar"><i id="barFill"></i></div>
+        <span class="ptext" id="ptext">第 0 / 0 步</span>
+      </div>
+      <div class="row">
+        <label>阈值系数</label>
+        <input type="range" id="ratio" min="0.1" max="0.9" step="0.05" value="0.5">
+        <b id="ratioVal">0.5</b>
+      </div>
+      <div class="checkline">
+        <input type="checkbox" id="showTheta" checked>
+        <label for="showTheta">显示阈值圆（半径 θ）</label>
+      </div>
+      <div class="checkline">
+        <input type="checkbox" id="showLabels" checked>
+        <label for="showLabels">显示样本编号</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>当前步骤</h2>
+      <div class="stepnote" id="stepnote">点击「下一步」开始演示。</div>
+    </div>
+
+    <div class="card">
+      <h2>运行状态</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="tableTitle">各样本的 D_min</h2>
+      <div class="tablewrap" id="tablewrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>样本数据</h2>
+      <div class="btnrow">
+        <button id="btnSample">载入示例数据</button>
+        <button id="btnRandom">随机生成</button>
+        <button id="btnClear">清空</button>
+      </div>
+    </div>
+
+    <details class="card">
+      <summary>算法伪代码</summary>
+      <pre>输入：样本集合 X = {x1, x2, …, xn}，阈值系数 ratio（通常取 1/2）
+
+1. 取第一个样本 x1 作为第 1 个聚类中心 z1
+2. 找出离 z1 最远的样本，作为第 2 个聚类中心 z2
+3. 计算阈值 θ = ratio × d(z1, z2)
+4. 重复执行：
+     对每个样本，计算它到所有聚类中心的
+       最近距离 D_min
+     找出 D_min 最大的样本 x*
+     若 D_min(x*) &gt; θ：
+        把 x* 作为新的聚类中心，继续重复
+     否则：
+        结束，不再产生新的聚类中心
+5. 把每个样本划分到离它最近的那个聚类中心
+
+输出：聚类中心 z1, z2, … 以及每个样本的类别</pre>
+    </details>
+  </aside>
+</main>
+
+<!-- ============================================================
+     脚本一：公共绘图工具
+     只做"画图"这件事，不包含任何算法逻辑。
+     为了让坐标计算简单，数据统一放在 [0,10] × [0,10] 的坐标系里。
+     ============================================================ -->
+<script>
+const WORLD = { w: 10, h: 10 };                       // 数据坐标系范围
+const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2'];
+const GRAY = '#64748b';
+const FONT = '12px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+
+/** 让画布铺满容器，并按屏幕像素比放大，避免高分屏发虚 */
+function fitCanvas(canvas) {
+  const W = Math.round(canvas.clientWidth);
+  if (!W) return null;                                // 容器被隐藏时直接跳过
+  const H = Math.round(Math.min(Math.max(W * 0.68, 380), 560));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.height = H + 'px';
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, W, H };
+}
+
+/** 数据坐标 ↔ 屏幕坐标的换算器（y 轴向上，符合数学直觉） */
+function projector(W, H, world) {
+  const pad = 46;
+  const scale = Math.min((W - 2 * pad) / world.w, (H - 2 * pad) / world.h);
+  const ox = (W - world.w * scale) / 2;
+  const oy = (H - world.h * scale) / 2;
+  return {
+    scale,
+    toScreen: (p) => [ox + p[0] * scale, H - oy - p[1] * scale],
+    fromScreen: (sx, sy) => [(sx - ox) / scale, (H - oy - sy) / scale],
+    rect: { x0: ox, y0: H - oy - world.h * scale, x1: ox + world.w * scale, y1: H - oy }
+  };
+}
+
+/** 白底 + 网格 + 刻度 */
+function drawBackground(ctx, proj, W, H) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  const r = proj.rect;
+
+  ctx.strokeStyle = '#e8eef6';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= WORLD.w; i++) {
+    const sx = proj.toScreen([i, 0])[0];
+    ctx.moveTo(sx, r.y0); ctx.lineTo(sx, r.y1);
+  }
+  for (let i = 0; i <= WORLD.h; i++) {
+    const sy = proj.toScreen([0, i])[1];
+    ctx.moveTo(r.x0, sy); ctx.lineTo(r.x1, sy);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= WORLD.w; i += 2) {
+    const sx = proj.toScreen([i, 0])[0];
+    ctx.fillText(i, sx, r.y1 + 6);
+  }
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 2; i <= WORLD.h; i += 2) {
+    const sy = proj.toScreen([0, i])[1];
+    ctx.fillText(i, r.x0 - 7, sy);
+  }
+  ctx.textAlign = 'left';
+}
+
+/** 画一个样本点 */
+function drawDot(ctx, proj, p, color, radius) {
+  const [x, y] = proj.toScreen(p);
+  ctx.beginPath();
+  ctx.arc(x, y, radius || 5.5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#fff';
+  ctx.stroke();
+}
+
+/** 画一个聚类中心（菱形，和样本点区分开） */
+function drawDiamond(ctx, proj, p, color, size) {
+  const [x, y] = proj.toScreen(p);
+  const s = size || 9;
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.lineTo(x + s, y);
+  ctx.lineTo(x, y + s);
+  ctx.lineTo(x - s, y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#fff';
+  ctx.stroke();
+}
+
+/** 画一个空心高亮圈（表示"当前正在考察的样本"） */
+function drawRing(ctx, proj, p, color, radius) {
+  const [x, y] = proj.toScreen(p);
+  ctx.beginPath();
+  ctx.arc(x, y, radius || 11, 0, Math.PI * 2);
+  ctx.setLineDash([]);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+}
+
+/** 画虚线（可以顺便在中间写上距离值） */
+function drawDashedLine(ctx, proj, a, b, color, label) {
+  const [x1, y1] = proj.toScreen(a);
+  const [x2, y2] = proj.toScreen(b);
+  ctx.save();
+  ctx.setLineDash([5, 5]);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+  if (label) drawTag(ctx, (x1 + x2) / 2, (y1 + y2) / 2, label, color);
+}
+
+/** 画一个带底色的数值标签 */
+function drawTag(ctx, x, y, text, color) {
+  ctx.font = FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 10;
+  ctx.fillStyle = 'rgba(255,255,255,.92)';
+  ctx.fillRect(x - w / 2, y - 9, w, 18);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+/** 以某个点为圆心、以数据长度为半径画虚线圆（用来表示阈值 θ） */
+function drawDashedCircle(ctx, proj, p, rWorld, color, alpha) {
+  const [x, y] = proj.toScreen(p);
+  ctx.save();
+  ctx.globalAlpha = alpha === undefined ? 0.5 : alpha;
+  ctx.setLineDash([5, 5]);
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, rWorld * proj.scale, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 在屏幕坐标处写字 */
+function drawText(ctx, x, y, text, color, align) {
+  ctx.font = FONT;
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+}
+</script>
+
+<!-- ============================================================
+     脚本二：★ 算法核心 —— 最大最小距离聚类法 ★
+     （学生重点阅读这一段；它只做计算，不碰页面上的任何元素）
+
+     算法思想：
+       ① 先取一个样本作为第 1 个聚类中心 z1（本程序取第 1 个样本）；
+       ② 找出离 z1 最远的样本作为第 2 个聚类中心 z2；
+       ③ 取阈值 θ = ratio × d(z1, z2)，ratio 通常取 1/2；
+          直观理解：θ 就是"一个样本要离所有聚类中心都足够远"的标准；
+       ④ 反复做同一件事——算出每个样本到最近中心的距离 D_min，
+          若最大的那个 D_min 仍然大于 θ，就把对应样本变成新的聚类中心；
+          直到最大的 D_min ≤ θ，说明没有样本需要新中心了，迭代结束；
+       ⑤ 最后把每个样本划分到离它最近的聚类中心。
+
+     为了让页面能够"一步步播放"，算法每做一次判断就用 shot() 记录一张
+     "现场照片"（当前的中心、D_min、结论等）到 history 数组里。
+     ============================================================ -->
+
+<script>
+/* ===== 算法核心 · 开始 ===== */
+
+/** 两个样本点之间的欧氏距离 */
+function distance(a, b) {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/** 把点格式化成 "(1.0, 2.5)" 这样的字符串，用于文字说明 */
+function fmt(p) {
+  return '(' + p[0].toFixed(1) + ', ' + p[1].toFixed(1) + ')';
+}
+
+/**
+ * 最大最小距离聚类法
+ * @param {number[][]} points 样本点，例如 [[0,0], [3,8], ...]
+ * @param {number} ratio      阈值系数，θ = ratio × d(z1, z2)，一般取 0.5
+ * @returns {{centers:number[], labels:number[], history:object[]}}
+ *          centers —— 聚类中心在 points 中的下标
+ *          labels  —— 每个样本的类别（取值 0,1,2,… 表示第几个聚类中心）
+ *          history —— 每一步的现场记录，页面靠它做步进演示
+ */
+function maxMinDistance(points, ratio) {
+  const n = points.length;
+  const history = [];
+  const shot = (s) => history.push(s);                       // 记录一步
+  const dmin = (p, centers) => Math.min(...centers.map(c => distance(p, points[c])));
+
+  if (n < 2) {
+    return { centers: [], labels: [], history: [{ phase: 'empty', note: '样本太少（至少需要 2 个），请在画布上添加样本点。' }] };
+  }
+
+  // ---------- ① 第一个聚类中心 z1 ----------
+  const centers = [0];
+  shot({
+    phase: 'z1', centers: [...centers],
+    note: `取第 1 个样本 x1 = ${fmt(points[0])} 作为第一个聚类中心 z1。`
+  });
+
+  // ---------- ② 离 z1 最远的样本 → z2 ----------
+  let far = 1;
+  let farDist = distance(points[1], points[0]);
+  for (let i = 2; i < n; i++) {
+    const d = distance(points[i], points[0]);
+    if (d > farDist) { farDist = d; far = i; }
+  }
+  shot({
+    phase: 'z2', centers: [...centers],
+    focus: { from: 0, to: far, text: farDist.toFixed(2) },
+    note: `在所有样本中找离 z1 最远的一个：x${far + 1} = ${fmt(points[far])}，距离 d(z1, x${far + 1}) = ${farDist.toFixed(2)}，把它作为第 2 个聚类中心 z2。`
+  });
+  centers.push(far);
+
+  // ---------- ③ 计算阈值 θ ----------
+  const theta = ratio * farDist;
+  shot({
+    phase: 'theta', centers: [...centers], theta,
+    note: `计算阈值 θ = ${ratio} × d(z1, z2) = ${ratio} × ${farDist.toFixed(2)} = ${theta.toFixed(2)}。`
+      + `以后某个样本只要到所有聚类中心的距离都大于 ${theta.toFixed(2)}，它就会成为新的聚类中心。`
+  });
+
+  // ---------- ④ 迭代：不断产生新的聚类中心 ----------
+  let round = 0;
+  while (true) {
+    round++;
+
+    // 每个样本到"最近的聚类中心"的距离 D_min
+    const dminList = points.map(p => dmin(p, centers));
+
+    // 找出 D_min 最大的那个样本
+    let maxIdx = 0;
+    let maxVal = -1;
+    for (let i = 0; i < n; i++) {
+      if (dminList[i] > maxVal) { maxVal = dminList[i]; maxIdx = i; }
+    }
+    // 它离哪个中心最近（画图时连一条虚线）
+    let nearIdx = 0;
+    for (let k = 1; k < centers.length; k++) {
+      if (distance(points[maxIdx], points[centers[k]]) < distance(points[maxIdx], points[centers[nearIdx]])) nearIdx = k;
+    }
+
+    shot({
+      phase: 'check', round, centers: [...centers], theta,
+      dmin: dminList, maxIdx, maxVal,
+      focus: { from: maxIdx, to: centers[nearIdx], text: maxVal.toFixed(2) },
+      note: `第 ${round} 轮：算出每个样本到最近聚类中心的距离 D_min，其中最大的是 x${maxIdx + 1}，D_min = ${maxVal.toFixed(2)}。`
+    });
+
+    if (maxVal > theta) {
+      // 足够远 → 让它成为新的聚类中心
+      centers.push(maxIdx);
+      shot({
+        phase: 'add', round, centers: [...centers], theta,
+        dmin: dminList, maxIdx, maxVal,
+        note: `因为 D_min = ${maxVal.toFixed(2)} > θ = ${theta.toFixed(2)}，说明 x${maxIdx + 1} 离现有的聚类中心都足够远，`
+          + `把它作为第 ${centers.length} 个聚类中心 z${centers.length}。然后继续下一轮判断。`
+      });
+    } else {
+      // 不够远 → 不再产生新中心，算法结束
+      shot({
+        phase: 'stop', round, centers: [...centers], theta,
+        dmin: dminList, maxIdx, maxVal,
+        note: `因为最大的 D_min = ${maxVal.toFixed(2)} ≤ θ = ${theta.toFixed(2)}，没有样本需要成为新的聚类中心，迭代结束，`
+          + `共得到 ${centers.length} 个聚类中心。`
+      });
+      break;
+    }
+  }
+
+  // ---------- ⑤ 归类：每个样本归到最近的聚类中心 ----------
+  const labels = points.map(p => {
+    let best = 0;
+    let bestDist = distance(p, points[centers[0]]);
+    for (let k = 1; k < centers.length; k++) {
+      const d = distance(p, points[centers[k]]);
+      if (d < bestDist) { bestDist = d; best = k; }
+    }
+    return best;
+  });
+  shot({
+    phase: 'result', centers: [...centers], theta, labels,
+    dmin: points.map(p => dmin(p, centers)),          // 最终中心下的 D_min，方便对照表格
+    note: `最后一步：把每个样本划分到离它最近的那个聚类中心，最终得到 ${centers.length} 个聚类。`
+  });
+
+  return { centers, labels, history };
+}
+
+/* ===== 算法核心 · 结束 ===== */
+
+</script>
+
+<!-- ============================================================
+     脚本三：页面交互
+     把算法的每一步画到画布上、把文字说明填进右侧面板，与算法本身无关。
+     ============================================================ -->
+<script>
+// 教材中常用的例子：5 个样本聚成 3 类（其中 x2 单独成一类）
+const SAMPLE_POINTS = [
+  [0, 0], [3, 8], [2, 2], [1, 1], [5, 3],
+  [4, 8], [6, 3], [5, 4], [6, 4], [7, 5]
+];
+
+const canvas = document.getElementById('canvas');
+const el = {
+  note: document.getElementById('stepnote'),
+  stats: document.getElementById('stats'),
+  table: document.getElementById('tablewrap'),
+  tableTitle: document.getElementById('tableTitle'),
+  bar: document.getElementById('barFill'),
+  ptext: document.getElementById('ptext'),
+  prev: document.getElementById('btnPrev'),
+  next: document.getElementById('btnNext'),
+  play: document.getElementById('btnPlay'),
+  first: document.getElementById('btnFirst'),
+  ratio: document.getElementById('ratio'),
+  ratioVal: document.getElementById('ratioVal'),
+  showTheta: document.getElementById('showTheta'),
+  showLabels: document.getElementById('showLabels')
+};
+
+const app = {
+  points: SAMPLE_POINTS.map(p => [...p]),
+  ratio: 0.5,
+  result: null,     // 算法返回的 { centers, labels, history }
+  step: 0,
+  timer: null
+};
+
+/* ---------------- 运行算法，生成所有步骤 ---------------- */
+function rebuild() {
+  app.result = maxMinDistance(app.points, app.ratio);
+  app.step = 0;
+  render();
+}
+
+/* ---------------- 绘制 ---------------- */
+function render() {
+  const view = fitCanvas(canvas);
+  if (!view) return;                                  // 画布不可见时先不画
+  const { ctx, W, H } = view;
+  const proj = projector(W, H, WORLD);
+  drawBackground(ctx, proj, W, H);
+
+  const step = app.result.history[app.step];
+  const P = app.points;
+  const centers = (step && step.centers) || [];
+
+  // ① 阈值圆：以每个聚类中心为圆心、θ 为半径
+  if (el.showTheta.checked && step && step.theta) {
+    centers.forEach((ci, k) => drawDashedCircle(ctx, proj, P[ci], step.theta, COLORS[k % COLORS.length], 0.45));
+  }
+
+  // ② 已经归类时，从每个样本连一条浅色线到它所属的中心
+  if (step && step.labels) {
+    P.forEach((p, i) => {
+      const c = step.labels[i];
+      drawDashedLine(ctx, proj, p, P[centers[c]], COLORS[c % COLORS.length] + '55');
+    });
+  }
+
+  // ③ 当前考察的样本与它最近的中心之间画一条虚线，并标出距离
+  if (step && step.focus) {
+    drawDashedLine(ctx, proj, P[step.focus.from], P[step.focus.to], '#f59e0b', step.focus.text);
+  }
+
+  // ④ 样本点：已归类时按类别上色，否则用灰色
+  P.forEach((p, i) => {
+    let color = GRAY;
+    if (step && step.labels) color = COLORS[step.labels[i] % COLORS.length];
+    else if (centers.includes(i)) color = COLORS[centers.indexOf(i) % COLORS.length];
+    drawDot(ctx, proj, p, color);
+  });
+
+  // ⑤ 样本编号
+  if (el.showLabels.checked) {
+    P.forEach((p, i) => {
+      const [x, y] = proj.toScreen(p);
+      drawText(ctx, x + 9, y - 9, 'x' + (i + 1), '#94a3b8', 'left');
+    });
+  }
+
+  // ⑥ 聚类中心（菱形）
+  centers.forEach((ci, k) => {
+    const color = COLORS[k % COLORS.length];
+    drawDiamond(ctx, proj, P[ci], color);
+    const [x, y] = proj.toScreen(P[ci]);
+    drawText(ctx, x, y - 18, 'z' + (k + 1), color, 'center');
+  });
+
+  // ⑦ 高亮"当前正在考察的样本"
+  if (step && step.focus && step.phase !== 'z2') {
+    drawRing(ctx, proj, P[step.focus.from], '#f59e0b');
+  }
+
+  updatePanel(step);
+}
+
+/* ---------------- 更新右侧面板 ---------------- */
+function updatePanel(step) {
+  const total = app.result.history.length;
+  const cur = Math.min(app.step + 1, total);
+
+  el.note.textContent = (step && step.note) || '请先添加样本点。';
+  el.ptext.textContent = `第 ${total ? cur : 0} / ${total} 步`;
+  el.bar.style.width = total > 1 ? ((cur - 1) / (total - 1) * 100) + '%' : '0%';
+
+  el.prev.disabled = app.step <= 0;
+  el.next.disabled = app.step >= total - 1;
+
+  // 运行状态
+  const centers = (step && step.centers) || [];
+  const rows = [
+    ['样本个数', app.points.length],
+    ['聚类中心个数', centers.length],
+    ['阈值 θ', step && step.theta ? step.theta.toFixed(2) : '—'],
+    ['本轮最大 D_min', step && step.maxVal !== undefined ? step.maxVal.toFixed(2) : '—']
+  ];
+  if (step && step.phase === 'result') rows.push(['最终类别数', app.result.centers.length]);
+  el.stats.innerHTML = rows
+    .map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`)
+    .join('');
+
+  // D_min 表格（不同步骤里这张表含义不同，标题跟着变）
+  if (step && step.dmin) {
+    el.tableTitle.textContent = step.round
+      ? `第 ${step.round} 轮判定的 D_min（决定是否新增中心）`
+      : '各样本到最终聚类中心的 D_min';
+    const head = '<table><thead><tr><th>样本</th><th>坐标</th><th>D_min</th></tr></thead><tbody>';
+    const body = app.points.map((p, i) => {
+      const isCenter = centers.includes(i);
+      const isMax = i === step.maxIdx;
+      const cls = isMax ? 'max' : (isCenter ? 'center' : '');
+      return `<tr class="${cls}"><td>${isCenter ? '▲ ' : ''}x${i + 1}</td>`
+        + `<td>${fmt(p)}</td><td>${step.dmin[i].toFixed(2)}</td></tr>`;
+    }).join('');
+    el.table.innerHTML = head + body + '</tbody></table>';
+  } else {
+    el.table.innerHTML = '<p style="color:#94a3b8;font-size:12.5px;margin:4px 2px">还没有计算 D_min。</p>';
+  }
+}
+
+/* ---------------- 步进控制 ---------------- */
+function go(step) {
+  app.step = Math.max(0, Math.min(step, app.result.history.length - 1));
+  render();
+}
+function next() { go(app.step + 1); }
+function prev() { go(app.step - 1); }
+
+function stopPlay() {
+  if (app.timer) { clearInterval(app.timer); app.timer = null; }
+  el.play.textContent = '▶ 自动播放';
+}
+function togglePlay() {
+  if (app.timer) { stopPlay(); return; }
+  if (app.step >= app.result.history.length - 1) app.step = 0;   // 播完了就从头再来
+  el.play.textContent = '⏸ 暂停';
+  app.timer = setInterval(() => {
+    if (app.step >= app.result.history.length - 1) { stopPlay(); return; }
+    next();
+  }, 1100);
+}
+
+el.next.addEventListener('click', () => { stopPlay(); next(); });
+el.prev.addEventListener('click', () => { stopPlay(); prev(); });
+el.play.addEventListener('click', togglePlay);
+el.first.addEventListener('click', () => { stopPlay(); go(0); });
+el.showTheta.addEventListener('change', render);
+el.showLabels.addEventListener('change', render);
+
+el.ratio.addEventListener('input', () => {
+  app.ratio = parseFloat(el.ratio.value);
+  el.ratioVal.textContent = app.ratio.toFixed(2);
+  stopPlay();
+  rebuild();
+});
+
+document.getElementById('btnSample').addEventListener('click', () => {
+  stopPlay(); app.points = SAMPLE_POINTS.map(p => [...p]); rebuild();
+});
+document.getElementById('btnRandom').addEventListener('click', () => {
+  stopPlay();
+  app.points = [];
+  for (let i = 0; i < 12; i++) {
+    app.points.push([
+      Math.round((0.5 + Math.random() * 9) * 10) / 10,
+      Math.round((0.5 + Math.random() * 9) * 10) / 10
+    ]);
+  }
+  rebuild();
+});
+document.getElementById('btnClear').addEventListener('click', () => {
+  stopPlay(); app.points = []; rebuild();
+});
+
+// 在画布上单击 = 添加一个样本点
+canvas.addEventListener('click', (e) => {
+  if (app.points.length >= 40) return;
+  const view = fitCanvas(canvas);
+  if (!view) return;
+  const proj = projector(view.W, view.H, WORLD);
+  const rect = canvas.getBoundingClientRect();
+  const [wx, wy] = proj.fromScreen(e.clientX - rect.left, e.clientY - rect.top);
+  if (wx < 0 || wx > WORLD.w || wy < 0 || wy > WORLD.h) return;
+  stopPlay();
+  app.points.push([Math.round(wx * 10) / 10, Math.round(wy * 10) / 10]);
+  rebuild();
+});
+
+// 键盘左右方向键步进
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight') { stopPlay(); next(); }
+  if (e.key === 'ArrowLeft') { stopPlay(); prev(); }
+});
+
+// 窗口大小变化时重画
+window.addEventListener('resize', render);
+
+rebuild();
+</script>
+</body>
+</html>
